@@ -38,7 +38,7 @@ html,body{box-sizing:border-box}
 *{touch-action:manipulation}
 body{overflow:hidden;height:100vh;height:100dvh}
 .wrap{max-width:520px;height:100%;margin:0 auto;display:flex;flex-direction:column;gap:6px}
-.boardwrap{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center}
+.boardwrap{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
 .btn .dot{display:inline-grid;place-items:center;min-width:20px;height:20px;border-radius:99px;background:#e5484d;color:#fff;font-size:12px;padding:0 5px;margin-left:4px;vertical-align:1px}
 .wrap.quake{animation:quake .45s}
 @keyframes quake{20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(4px)}}
@@ -1134,9 +1134,19 @@ function diagBox(v){
 // 주차장은 남는 공간에 꽉 맞는 정사각형으로
 function fitBoard(){
   const bw = $('boardwrap'), b = $('board');
-  const sz = Math.max(140, Math.floor(Math.min(bw.clientWidth, bw.clientHeight)));
+  // 남는 공간보다 조금(6%) 작게 해서 아래 아이템 버튼과 겹치지 않게
+  const sz = Math.max(140, Math.floor(Math.min(bw.clientWidth, bw.clientHeight) * .94));
   b.style.width = b.style.height = sz + 'px';
+  return sz;
 }
+// 주소창이 생기거나 글씨체가 늦게 들어와서 남는 공간이 바뀌면 주차장 크기를 다시 맞춘다
+let lastBoardSize = 0;
+if(window.ResizeObserver) new ResizeObserver(() => {
+  const bw = $('boardwrap'), want = Math.floor(Math.min(bw.clientWidth, bw.clientHeight) * .94);
+  if(!vehicles || Math.abs(want - lastBoardSize) < 2) return;
+  lastBoardSize = want;
+  if(!busy) drawBoard(); else fitBoard();
+}).observe(document.getElementById('boardwrap'));
 function drawBoard(flash){
   fitBoard();
   const b = $('board'); b.querySelectorAll('.veh,.tunnel').forEach(e=>e.remove());

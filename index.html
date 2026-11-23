@@ -101,6 +101,10 @@ button{font:inherit;cursor:pointer}
 .veh.shake svg{animation:shake .35s}
 .veh.blocker svg{animation:flash .5s}
 .veh.going{z-index:3}
+.veh.diag{transform-origin:50% 50%}
+.veh.diag svg{filter:drop-shadow(0 3px 2px rgba(0,0,0,.4))}
+.dbadge{position:absolute;left:50%;top:50%;border-radius:50%;background:#fff;color:#1d2430;display:grid;place-items:center;
+  font-weight:700;font-family:sans-serif;line-height:1;opacity:.95;pointer-events:none}
 .garage{position:absolute;inset:3%;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
   background:repeating-linear-gradient(135deg,#8a919c 0 10px,#7a818c 10px 20px);border:3px solid #5b616b;color:#fff;
   font-family:var(--display);box-shadow:0 4px 0 rgba(0,0,0,.3)}
@@ -335,14 +339,49 @@ const BIG = { easy:[0, 0,0,0,.10,.10,.12,.12,.15,.15,.15], hard:[0, .15,.15,.18,
 // items per mode; hard mode is meant to be cleared mostly by planning
 const MODE_ITEMS = { easy:{tow:1, shuffle:2, fill:1, slot:1}, hard:{tow:1, shuffle:1, fill:1, slot:0} };
 
+/* ---------- shapes ----------
+ straight car: (c,r) is its top-left cell, h = horizontal, dir = +1 right/down, -1 left/up
+ diagonal car: (c,r) is its tail cell, (dx,dy) = which corner it drives toward
+ block = cells nobody else may use; a diagonal car also takes the two corner cells it cuts across
+ swept = cells it has to pass through to leave the board (diagonal: also the corner cells beside each step) */
+function geoBody(v){
+  const o = [];
+  for(let i = 0; i < v.len; i++) o.push(v.diag ? [v.c+i*v.dx, v.r+i*v.dy] : v.h ? [v.c+i, v.r] : [v.c, v.r+i]);
+  return o;
+}
+function geoBlock(v){
+  const b = geoBody(v);
+  if(!v.diag) return b;
+  const o = b.slice();
+  for(let i = 0; i < v.len-1; i++){ const [x,y] = b[i]; o.push([x+v.dx, y], [x, y+v.dy]); }
+  return o;
+}
+function geoSwept(v, N){
+  const inb = (x,y) => x>=0 && y>=0 && x<N && y<N;
+  let dx, dy, x, y;
+  if(v.diag){ dx = v.dx; dy = v.dy; x = v.c+(v.len-1)*dx; y = v.r+(v.len-1)*dy; }
+  else if(v.h){ dx = v.dir; dy = 0; x = v.dir>0 ? v.c+v.len-1 : v.c; y = v.r; }
+  else { dx = 0; dy = v.dir; x = v.c; y = v.dir>0 ? v.r+v.len-1 : v.r; }
+  const o = [];
+  for(;;){
+    if(v.diag){ if(inb(x+dx,y)) o.push([x+dx,y]); if(inb(x,y+dy)) o.push([x,y+dy]); }
+    x += dx; y += dy;
+    if(!inb(x,y)) break;
+    o.push([x,y]);
+  }
+  return o;
+}
+
 // Plays the intended order with the game's rules (leftmost bus boards first, 4 bays, no items).
 function solvesCleanly(L){
   const N = L.n, vs = L.vehicles.map(v => ({...v, gone:false}));
   const byId = new Map(vs.map(v => [v.id, v]));
   const queue = L.queue.slice(), bays = [null,null,null,null];
-  const occ = (x,y) => vs.some(v => !v.gone && !v.waiting && (v.h ? (y===v.r && x>=v.c && x<v.c+v.len) : (x===v.c && y>=v.r && y<v.r+v.len)));
-  const free = v => { let x,y; if(v.h){x=v.dir>0?v.c+v.len:v.c-1;y=v.r}else{x=v.c;y=v.dir>0?v.r+v.len:v.r-1}
-    while(x>=0&&y>=0&&x<N&&y<N){ if(occ(x,y)) return false; if(v.h)x+=v.dir; else y+=v.dir; } return true; };
+  const free = v => {
+    const taken = new Set();
+    for(const w of vs) if(w !== v && !w.gone && !w.waiting) geoBlock(w).forEach(([x,y]) => taken.add(x+','+y));
+    return !geoSwept(v, N).some(([x,y]) => taken.has(x+','+y));
+  };
   let removed = 0;
   for(const o of removalOrder(L.vehicles)){
     const v = byId.get(o.id), b = bays.indexOf(null);
@@ -361,9 +400,10 @@ function solvesCleanly(L){
 //  mystery: color hidden until nothing blocks its way out
 //  cover (garage): opens after that many vehicles have left the lot
 //  tunnel: a queue of cars that pull out one by one into the same spot
+//  diag: share of cars parked at 45 degrees
 function features(k, hard){
-  if(hard) return { mystery: k>=15 ? .3 : .25, covers: k>=15 ? 3 : k>=6 ? 2 : k>=3 ? 1 : 0, tunnels: k>=18 ? 3 : k>=8 ? 2 : k>=5 ? 1 : 0 };
-  return { mystery: k>=20 ? .25 : k>=4 ? .2 : 0, covers: k>=20 ? 3 : k>=9 ? 2 : k>=7 ? 1 : 0, tunnels: k>=22 ? 3 : k>=15 ? 2 : k>=9 ? 1 : 0 };
+  if(hard) return { diag: k>=15 ? .35 : k>=4 ? .25 : 0, mystery: k>=15 ? .3 : .25, covers: k>=15 ? 3 : k>=6 ? 2 : k>=3 ? 1 : 0, tunnels: k>=18 ? 3 : k>=8 ? 2 : k>=5 ? 1 : 0 };
+  return { diag: k>=20 ? .3 : k>=12 ? .2 : 0, mystery: k>=20 ? .25 : k>=4 ? .2 : 0, covers: k>=20 ? 3 : k>=9 ? 2 : k>=7 ? 1 : 0, tunnels: k>=22 ? 3 : k>=15 ? 2 : k>=9 ? 1 : 0 };
 }
 // clean solution: reverse placement order, each tunnel's cars right after the car parked in front of it
 function removalOrder(vs){
@@ -386,32 +426,37 @@ function makeLevel(k, mode = 'easy'){
     const vehicles = L1.map(([id,color,c,r,len,h,dir]) => ({id,color,c,r,len,h,dir,cap: len===3 ? 16 : 4}));
     return { n:6, vehicles, queue: buildQueue(vehicles.slice().reverse(), 2, seeded(7)), tunnels: [] };
   }
-  const P = levelParams(k, hard), N = P.n;
+  const F = features(k, hard), P0 = levelParams(k, hard), N = P0.n;
+  // diagonal cars also use the corner cells they cut across, so boards with them hold fewer cars
+  const P = F.diag > 0 ? {...P0, count: Math.round(P0.count * (1 - F.diag*.7))} : P0;
   for(let attempt = 0; attempt < 400; attempt++){
     const R = seeded(k*7919 + attempt*104729 + (hard ? 977 : 13));
     const grid = Array.from({length:N}, () => Array(N).fill(-1));
     const inb = (x,y) => x>=0 && y>=0 && x<N && y<N;
     const vs = [];
     for(let i = 0; i < P.count; i++){
+      const wantDiag = F.diag > 0 && R() < F.diag;
       const roll = R(), big = k <= 10 ? BIG[hard ? 'hard' : 'easy'][k] : (hard ? .28 : .18);
       const want = roll < big ? 4 : roll < big + P.bus ? 3 : 2;
       const cands = [];
-      for(const len of [2,3,4]) for(const h of [true,false]) for(const dir of [1,-1])
-      for(let c = 0; c < N; c++) for(let r = 0; r < N; r++){
-        const cs = []; let ok = true;
-        for(let j = 0; j < len; j++){ const x = h?c+j:c, y = h?r:r+j; if(!inb(x,y) || grid[y][x] >= 0){ ok = false; break; } cs.push([x,y]); }
-        if(!ok) continue;
-        const path = []; let x, y;
-        if(h){ x = dir>0 ? c+len : c-1; y = r; } else { x = c; y = dir>0 ? r+len : r-1; }
-        while(inb(x,y)){ if(grid[y][x] >= 0){ ok = false; break; } path.push([x,y]); if(h) x += dir; else y += dir; }
-        if(!ok) continue;
+      const shapes = [];
+      for(const len of [2,3,4]) for(const h of [true,false]) for(const dir of [1,-1]) shapes.push({len, h, dir});
+      if(F.diag > 0) for(const len of [2,3]) for(const dx of [1,-1]) for(const dy of [1,-1]) shapes.push({len, diag:true, dx, dy});
+      for(const sh of shapes) for(let c = 0; c < N; c++) for(let r = 0; r < N; r++){
+        const q = {...sh, c, r};
+        const block = geoBlock(q);
+        if(block.some(([x,y]) => !inb(x,y) || grid[y][x] >= 0)) continue;
+        const path = geoSwept(q, N);
+        if(path.some(([x,y]) => grid[y][x] >= 0)) continue;
         let score = 0;
-        for(const v of vs) if(v.path.some(([px,py]) => cs.some(([a,b]) => a===px && b===py))) score++;
-        cands.push({c,r,len,h,dir,cs,path,score});
+        for(const v of vs) if(v.path.some(([px,py]) => block.some(([a,b]) => a===px && b===py))) score++;
+        cands.push({...q, cs:block, path, score});
       }
       if(!cands.length) break;
-      const sized = cands.filter(q => q.len === want);
-      const pool = sized.length ? sized : cands;
+      const kind = cands.filter(q => !!q.diag === wantDiag);
+      const pool0 = kind.length ? kind : cands;
+      const sized = pool0.filter(q => q.len === (wantDiag ? Math.min(want, 3) : want));
+      const pool = sized.length ? sized : pool0;
       const best = Math.max(...pool.map(q => q.score));
       const top = pool.filter(q => q.score >= best - (!hard && R() < .3 ? 1 : 0));
       const q = top[Math.floor(R()*top.length)];
@@ -422,10 +467,11 @@ function makeLevel(k, mode = 'easy'){
     const palette = COLORSET.slice(0, P.colors);
     const colors = vs.map((_,i) => i < P.colors ? palette[i] : palette[Math.floor(R()*P.colors)]);
     for(let i = colors.length-1; i > 0; i--){ const j = Math.floor(R()*(i+1)); [colors[i],colors[j]] = [colors[j],colors[i]]; }
-    const vehicles = vs.map((v,i) => ({id:'v'+i, color:colors[i], c:v.c, r:v.r, len:v.len, h:v.h, dir:v.dir, cap:pickCap(v.len, R, k, hard)}));
-    const order = vehicles.slice().reverse(), F = features(k, hard);
+    const vehicles = vs.map((v,i) => ({id:'v'+i, color:colors[i], c:v.c, r:v.r, len:v.len, cap:pickCap(v.len, R, k, hard),
+      ...(v.diag ? {diag:true, dx:v.dx, dy:v.dy} : {h:v.h, dir:v.dir})}));
+    const order = vehicles.slice().reverse();
     order.forEach((v,i) => { if(i >= 1 && R() < F.mystery) v.mystery = true; });
-    const spots = order.map((v,i) => [v,i]).filter(([v,i]) => i >= 2 && !v.mystery);
+    const spots = order.map((v,i) => [v,i]).filter(([v,i]) => i >= 2 && !v.mystery && !v.diag);
     for(let c = 0; c < F.covers && spots.length; c++){
       const [v,i] = spots.splice(Math.floor(R()*spots.length), 1)[0];
       v.cover = Math.min(i, 2 + Math.floor(R()*4));
@@ -434,9 +480,8 @@ function makeLevel(k, mode = 'easy'){
     const tunnels = [];
     if(F.tunnels){
       const rays = new Set();
-      for(const v of vehicles){ let x, y; if(v.h){ x = v.dir>0 ? v.c+v.len : v.c-1; y = v.r; } else { x = v.c; y = v.dir>0 ? v.r+v.len : v.r-1; }
-        while(inb(x,y)){ rays.add(x+','+y); if(v.h) x += v.dir; else y += v.dir; } }
-      let cands = order.filter(v => !v.cover).map(v => [v, v.h ? (v.dir>0 ? v.c-1 : v.c+v.len) : v.c, v.h ? v.r : (v.dir>0 ? v.r-1 : v.r+v.len)])
+      for(const v of vehicles) geoSwept(v, N).forEach(([x,y]) => rays.add(x+','+y));
+      let cands = order.filter(v => !v.cover && !v.diag).map(v => [v, v.h ? (v.dir>0 ? v.c-1 : v.c+v.len) : v.c, v.h ? v.r : (v.dir>0 ? v.r-1 : v.r+v.len)])
         .filter(([v,x,y]) => inb(x,y) && grid[y][x] < 0 && !rays.has(x+','+y));
       for(let t = 0; t < F.tunnels && cands.length; t++){
         const [v,x,y] = cands.splice(Math.floor(R()*cands.length), 1)[0];
@@ -464,7 +509,7 @@ const C = c => `var(--c-${c})`;
 const KIND = {4:'승용차', 8:'승합차', 16:'미니버스', 24:'버스', 40:'큰 버스'};
 
 /* ---------- drawings ---------- */
-function vehicleSVG(color, len, h, dir, cap){
+function vehicleSVG(color, len, h, dir, cap, stretch){
   const L = len*100, W = 100;
   const bus = len >= 3;
   // drawn facing +x in a L×W box, then rotated into place
@@ -504,9 +549,9 @@ function vehicleSVG(color, len, h, dir, cap){
   const bx = bus ? L/2-20 : 103, by = 50;
   const [px,py] = !t ? [bx,by] : (h ? [L-bx, W-by] : dir>0 ? [W-by, bx] : [by, L-bx]);
   const badge = `<circle cx="${px}" cy="${py}" r="32" fill="#fff" opacity=".95"/><text x="${px}" y="${py+12}" font-size="${cap>=10?32:38}" font-weight="700" text-anchor="middle" fill="#1d2430" font-family="sans-serif">${cap}</text>`;
-  return `<svg viewBox="${vb}" aria-hidden="true"><defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+  return `<svg viewBox="${vb}"${stretch ? ' preserveAspectRatio="none"' : ''} aria-hidden="true"><defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#fff" stop-opacity=".25"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".22"/></linearGradient></defs>
-    <g transform="${t}">${wheels}${top}${lights}${arrow}</g>${badge}</svg>`;
+    <g transform="${t}">${wheels}${top}${lights}${arrow}</g>${stretch ? '' : badge}</svg>`;
 }
 function personSVG(color){
   return `<svg viewBox="0 0 26 40" aria-hidden="true">
@@ -626,13 +671,16 @@ $('it-slot').onclick = ()=>{
   bays.push(null);
   sfx.board(4); drawBays({opened:bays.length-1}); drawItems(); toast('자리 +1'); kick();
 };
-function cells(v){ const o=[]; for(let i=0;i<v.len;i++) o.push(v.h?[v.c+i,v.r]:[v.c,v.r+i]); return o; }
-function occupant(x,y){ return vehicles.find(v=>!v.gone && !v.waiting && cells(v).some(([a,b])=>a===x&&b===y)); }
+function occupant(x,y,except){ return vehicles.find(w=>w!==except && !w.gone && !w.waiting && geoBlock(w).some(([a,b])=>a===x&&b===y)); }
 function blockerOf(v){
-  let x, y;
-  if(v.h){ x = v.dir>0 ? v.c+v.len : v.c-1; y = v.r; } else { x = v.c; y = v.dir>0 ? v.r+v.len : v.r-1; }
-  while(x>=0&&x<N&&y>=0&&y<N){ const o = occupant(x,y); if(o) return o; if(v.h) x+=v.dir; else y+=v.dir; }
+  for(const [x,y] of geoSwept(v, N)){ const o = occupant(x,y,v); if(o) return o; }
   return null;
+}
+// diagonal car: a rotated box centered between its tail and front cells (units: cells)
+function diagBox(v){
+  const fx = v.c+(v.len-1)*v.dx, fy = v.r+(v.len-1)*v.dy;
+  const mx = (v.c+fx)/2+.5, my = (v.r+fy)/2+.5, Lc = (v.len-1)*1.4142+.8, Wc = .62;
+  return {mx, my, Lc, Wc, ang: Math.atan2(v.dy, v.dx)*180/Math.PI, fx, fy};
 }
 
 function drawBoard(flash){
@@ -651,9 +699,19 @@ function drawBoard(flash){
     if(v.gone || v.waiting) continue;
     const el = document.createElement('button');
     el.className = 'veh'; el.id = 'veh-'+v.id; el.style.padding = (7/N)+'%';
-    el.style.left = v.c/N*100+'%'; el.style.top = v.r/N*100+'%';
-    el.style.width = (v.h?v.len:1)/N*100+'%'; el.style.height = (v.h?1:v.len)/N*100+'%';
-    const way = v.h ? (v.dir>0?'오른쪽':'왼쪽') : (v.dir>0?'아래':'위');
+    let way;
+    if(v.diag){
+      const d = diagBox(v);
+      el.classList.add('diag'); el.style.padding = '0';
+      el.style.left = (d.mx-d.Lc/2)/N*100+'%'; el.style.top = (d.my-d.Wc/2)/N*100+'%';
+      el.style.width = d.Lc/N*100+'%'; el.style.height = d.Wc/N*100+'%';
+      el.style.transform = `translate(0px,0px) rotate(${d.ang}deg)`;
+      way = (v.dy>0 ? '아래 ' : '위 ') + (v.dx>0 ? '오른쪽' : '왼쪽');
+    } else {
+      el.style.left = v.c/N*100+'%'; el.style.top = v.r/N*100+'%';
+      el.style.width = (v.h?v.len:1)/N*100+'%'; el.style.height = (v.h?1:v.len)/N*100+'%';
+      way = v.h ? (v.dir>0?'오른쪽':'왼쪽') : (v.dir>0?'아래':'위');
+    }
     if(v.cover > 0){
       el.classList.add('covered');
       el.setAttribute('aria-label', `차고, ${v.cover}대 더 빠지면 열림`);
@@ -663,7 +721,11 @@ function drawBoard(flash){
     }
     const hidden = v.mystery && !v.revealed;
     el.setAttribute('aria-label', hidden ? `물음표 ${KIND[v.cap]}, ${way}으로 나감` : `${NAME[v.color]} ${KIND[v.cap]}(${v.cap}명), ${way}으로 나감`);
-    el.innerHTML = vehicleSVG(hidden ? 'X' : v.color, v.len, v.h, v.dir, hidden ? '?' : v.cap);
+    if(v.diag){
+      const px = $('board').clientWidth/N, d = diagBox(v);
+      el.innerHTML = vehicleSVG(hidden ? 'X' : v.color, v.len, true, 1, 0, true)
+        + `<span class="dbadge" style="width:${px*.5}px;height:${px*.5}px;font-size:${px*.3}px;transform:translate(-50%,-50%) rotate(${-d.ang}deg)">${hidden ? '?' : v.cap}</span>`;
+    } else el.innerHTML = vehicleSVG(hidden ? 'X' : v.color, v.len, v.h, v.dir, hidden ? '?' : v.cap);
     if(flash && flash.has(v)) el.classList.add(flash.get(v));
     el.onclick = () => tap(v, el);
     b.appendChild(el);
@@ -738,9 +800,15 @@ function tap(v, el){
   }
   busy = true; sfx.go(); buzz(15);
   const cell = $('board').clientWidth/N;
-  const dist = (v.h ? (v.dir>0 ? N-v.c : v.c+v.len) : (v.dir>0 ? N-v.r : v.r+v.len)) + .5;
   el.classList.add('going');
-  el.style.transform = v.h ? `translateX(${v.dir*dist*cell}px)` : `translateY(${v.dir*dist*cell}px)`;
+  if(v.diag){
+    const d = diagBox(v);
+    const steps = Math.min(v.dx>0 ? N-d.fx : d.fx+1, v.dy>0 ? N-d.fy : d.fy+1) + v.len;
+    el.style.transform = `translate(${v.dx*steps*cell}px,${v.dy*steps*cell}px) rotate(${d.ang}deg)`;
+  } else {
+    const dist = (v.h ? (v.dir>0 ? N-v.c : v.c+v.len) : (v.dir>0 ? N-v.r : v.r+v.len)) + .5;
+    el.style.transform = v.h ? `translateX(${v.dir*dist*cell}px)` : `translateY(${v.dir*dist*cell}px)`;
+  }
   setTimeout(()=>{
     v.gone = true; el.remove();
     bays[free] = {v, n:0, leaving:false};
@@ -771,6 +839,8 @@ function afterLeave(left){
 const FEATURE_INFO = {
   mystery: { title: '새로운 차: 물음표 차', text: '색깔이 가려진 까만 차예요. 앞길이 뚫리면 진짜 색깔이 보여요.',
     pic: () => `<div class="sample">${vehicleSVG('X', 2, true, 1, '?')}</div>` },
+  diag: { title: '새로운 차: 대각선 차', text: '비스듬히 선 차예요. 화살표 쪽 대각선으로 빠져나가요. 모서리끼리 붙은 두 차 사이로는 못 지나가요.',
+    pic: () => `<div class="sample" style="width:150px;transform:rotate(-35deg)">${vehicleSVG('B', 2, true, 1, 8)}</div>` },
   tunnel: { title: '새로운 칸: 터널', text: '터널 앞의 차가 빠지면, 터널 안에 있던 차가 같은 자리로 나와요. 숫자는 터널에 남은 차 수예요.',
     pic: () => `<div class="sample" style="width:90px"><span class="tunnel" style="position:static;display:block;width:90px;height:80px;padding:0"><span><i>↑</i><b>×2</b></span></span></div>` },
   cover: { title: '새로운 칸: 차고', text: '숫자만큼 다른 차가 주차장을 빠져나가면 문이 열리고, 안에 있던 차가 나와요.',
@@ -783,6 +853,7 @@ function showIntro(){
   if(vehicles.some(v => v.mystery) && !progress.seen.mystery) introQueue.push('mystery');
   if(vehicles.some(v => v.cover) && !progress.seen.cover) introQueue.push('cover');
   if(tunnels.length && !progress.seen.tunnel) introQueue.push('tunnel');
+  if(vehicles.some(v => v.diag) && !progress.seen.diag) introQueue.push('diag');
   nextIntro();
 }
 function nextIntro(){

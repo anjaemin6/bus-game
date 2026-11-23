@@ -136,6 +136,12 @@ button{font:inherit;cursor:pointer}
   border:2px solid var(--line);background:var(--panel);color:var(--fg);font-family:var(--display);font-size:15px;white-space:nowrap;box-shadow:0 4px 0 var(--line)}
 .item:active{transform:translateY(2px);box-shadow:0 2px 0 var(--line)}
 .item svg{width:26px;height:26px;flex:0 0 auto}
+.coins{display:inline-flex;align-items:center;gap:4px;font-family:var(--display);font-size:16px;font-variant-numeric:tabular-nums;
+  background:var(--panel);border:2px solid var(--line);border-radius:99px;padding:2px 10px 2px 4px;margin-left:6px;vertical-align:1px}
+.coin{width:20px;height:20px;flex:0 0 auto}
+.coins.bump{animation:bump .3s 2}
+.item .badge.buy{background:#f5b700;color:#5a3a00;gap:2px;display:flex;align-items:center}
+.item .badge.buy .coin{width:14px;height:14px}
 .item .badge{position:absolute;top:-8px;right:-6px;min-width:24px;height:24px;border-radius:99px;background:var(--accent);color:#fff;
   font-size:14px;display:grid;place-items:center;padding:0 6px;font-variant-numeric:tabular-nums}
 .item:disabled{opacity:.45;cursor:default}
@@ -190,7 +196,7 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
   <header>
     <div class="lv">
       <h1>출발 정류장</h1>
-      <span class="sub" id="stat">1단계</span>
+      <span class="sub"><span id="stat">1단계</span><span class="coins" id="coins" aria-label="동전"><svg class="coin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="#f5b700"/><circle cx="10" cy="10" r="6.5" fill="none" stroke="#c98a00" stroke-width="1.6"/><text x="10" y="13.5" font-size="9" text-anchor="middle" fill="#8a5a00" font-family="sans-serif" font-weight="700">W</text></svg><b id="coinN">0</b></span></span>
     </div>
     <div class="tools">
       <button class="btn" id="levelsBtn">단계</button>
@@ -229,7 +235,7 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
 
   <p class="help"><b>차를 누르면</b> 머리 쪽으로 빠져나가 정류장에 섭니다. 앞이 막힌 차는 못 나가요.
     맨 앞 손님부터 <b>같은 색 차</b>에 타고, 자리가 차면 출발해요. 정류장이 꽉 막히면 집니다.
-    손님이 <b>다 탈 때까지 기다렸다가</b> 다음 차를 빼면 실수가 줄어요. 막히면 <b>아이템</b>을 써 보세요. 아이템을 안 쓰고 깨면 별을 더 받아요.</p>
+    손님이 <b>다 탈 때까지 기다렸다가</b> 다음 차를 빼면 실수가 줄어요. 막히면 <b>아이템</b>을 써 보세요. 아이템은 다음 판에도 남고, 다 쓰면 판을 깨서 모은 <b>동전</b>으로 살 수 있어요. 아이템을 안 쓰고 깨면 별과 동전을 더 받아요.</p>
 </div>
 
 <div class="overlay" id="overlay" hidden>
@@ -256,6 +262,16 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
     <button class="btn" id="pickClose">닫기</button>
   </div>
 </div>
+<div class="overlay" id="shop" hidden>
+  <div class="card">
+    <h2 id="shTitle"></h2>
+    <p id="shText"></p>
+    <div class="row">
+      <button class="btn" id="shNo">그만두기</button>
+      <button class="btn primary" id="shYes">사기</button>
+    </div>
+  </div>
+</div>
 <div class="overlay" id="intro" hidden>
   <div class="card">
     <h2 id="inTitle"></h2>
@@ -272,9 +288,14 @@ let items, mode = null, used = 0, rescued = false;
 const SYM = {R:'●', B:'■', Y:'▲', G:'◆', P:'★', K:'♥', X:'?'};
 const NAME = {R:'빨강', B:'파랑', Y:'노랑', G:'초록', P:'보라', K:'분홍', X:'물음표'};
 let diff = 'easy', levelNo = 1, current;
-let progress = {easy:{unlocked:1, stars:{}}, hard:{unlocked:1, stars:{}}};
+let progress = {easy:{unlocked:1, stars:{}}, hard:{unlocked:1, stars:{}}, coins:100, items:{tow:2, shuffle:2, fill:2, slot:2}};
 try{ const p = JSON.parse(localStorage.getItem('bus-progress')||'null'); if(p && p.easy && p.hard) progress = p;
   const last = JSON.parse(localStorage.getItem('bus-last')||'null'); if(last && progress[last.diff] && last.level>=1 && last.level<=progress[last.diff].unlocked){ diff = last.diff; levelNo = last.level; } }catch(e){}
+// older saves had no coins or items yet
+if(typeof progress.coins !== 'number') progress.coins = 100;
+if(!progress.items) progress.items = {tow:2, shuffle:2, fill:2, slot:2};
+const PRICE = {tow:60, shuffle:40, fill:60, slot:50};
+const ITEM_NAME = {tow:'견인차', shuffle:'섞기', fill:'채우기', slot:'자리 추가'};
 function saveProgress(){ try{ localStorage.setItem('bus-progress', JSON.stringify(progress)); localStorage.setItem('bus-last', JSON.stringify({diff, level:levelNo})); }catch(e){} }
 // [id, color, col, row, length, horizontal, dir(+1 right/down, -1 left/up)]
 /* Level data. Level 1 is hand-made; the rest are generated so that a clean solution always exists:
@@ -597,7 +618,7 @@ function init(){
   bays = Array(START_BAYS).fill(null);
   queue = current.queue.slice(); lastQueueLen = queue.length; stuckWarned = false;
   rescued = false; mistakes = 0; used = 0; busy = false; over = false; startAt = Date.now();
-  items = {...MODE_ITEMS[diff]}; mode = null; saveProgress();
+  items = progress.items; mode = null; saveProgress();
   $('overlay').hidden = true; stopFx();
   drawBoard(); drawQueue(); drawBays(); drawStat(); drawItems();
   showIntro();
@@ -612,13 +633,17 @@ function canShuffle(){
 }
 function drawItems(){
   for(const k of ['tow','shuffle','fill','slot']){
-    $('n-'+k).textContent = items[k];
-    $('it-'+k).disabled = over || items[k] <= 0
+    const nb = $('n-'+k);
+    nb.classList.toggle('buy', items[k] <= 0);
+    nb.innerHTML = items[k] > 0 ? items[k] : `<svg class="coin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="#f5b700"/><circle cx="10" cy="10" r="6.5" fill="none" stroke="#c98a00" stroke-width="1.6"/><text x="10" y="13.5" font-size="9" text-anchor="middle" fill="#8a5a00" font-family="sans-serif" font-weight="700">W</text></svg>${PRICE[k]}`;
+    $('it-'+k).disabled = over
       || (k==='shuffle' && !canShuffle())
       || (k==='fill' && !bays.some(s=>s && !s.leaving))
       || (k==='slot' && bays.length >= MAX_BAYS)
       || (k==='tow' && !vehicles.some(v=>!v.gone));
   }
+  $('coinN').textContent = progress.coins;
+  saveProgress();
   $('it-tow').classList.toggle('on', mode==='tow');
   $('it-fill').classList.toggle('on', mode==='fill');
   $('board').classList.toggle('towing', mode==='tow');
@@ -626,8 +651,30 @@ function drawItems(){
   $('hint').textContent = mode==='tow' ? '꺼낼 차를 누르세요 (다시 누르면 취소)'
     : mode==='fill' ? '꽉 채울 정류장 버스를 누르세요 (다시 누르면 취소)' : '';
 }
+let buyFor = null;
+function offerBuy(k){
+  if(over) return;
+  buyFor = k;
+  const enough = progress.coins >= PRICE[k];
+  $('shTitle').textContent = `${ITEM_NAME[k]} 사기`;
+  $('shText').textContent = enough
+    ? `${ITEM_NAME[k]}가 다 떨어졌어요. 동전 ${PRICE[k]}개로 1개 살까요? (지금 동전 ${progress.coins}개)`
+    : `동전이 모자라요. ${ITEM_NAME[k]}는 동전 ${PRICE[k]}개인데 지금 ${progress.coins}개 있어요. 판을 깨면 동전을 받아요.`;
+  $('shYes').hidden = !enough;
+  $('shop').hidden = false; (enough ? $('shYes') : $('shNo')).focus();
+}
+$('shNo').onclick = ()=>{ $('shop').hidden = true; buyFor = null; };
+$('shYes').onclick = ()=>{
+  const k = buyFor; $('shop').hidden = true; buyFor = null;
+  if(!k || progress.coins < PRICE[k]) return;
+  progress.coins -= PRICE[k]; items[k]++;
+  sfx.board(5); toast(`${ITEM_NAME[k]} +1`);
+  const c = $('coins'); c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump');
+  drawItems(); drawBays();
+};
 $('it-tow').onclick = ()=>{
   if(over) return;
+  if(mode!=='tow' && items.tow <= 0){ offerBuy('tow'); return; }
   if(mode==='tow'){ mode=null; drawItems(); return; }
   if(bays.indexOf(null) < 0){ toast('정류장 자리가 없어요'); sfx.honk(); return; }
   mode = 'tow'; sfx.board(1); drawItems();
@@ -635,7 +682,8 @@ $('it-tow').onclick = ()=>{
 // shuffle car colors in the lot, only between cars with the same seat count,
 // so seats per color still match the passengers waiting
 $('it-shuffle').onclick = ()=>{
-  if(over || busy || items.shuffle <= 0 || !canShuffle()) return;
+  if(over || busy || !canShuffle()) return;
+  if(items.shuffle <= 0){ offerBuy('shuffle'); return; }
   items.shuffle--; used++; mode = null; drawBays();
   const pool = shufflePool();
   for(const c of new Set(pool.map(v=>v.cap))){
@@ -650,6 +698,7 @@ $('it-shuffle').onclick = ()=>{
 $('it-fill').onclick = ()=>{
   if(over) return;
   if(mode==='fill'){ mode=null; drawItems(); drawBays(); return; }
+  if(items.fill <= 0){ offerBuy('fill'); return; }
   if(!bays.some(s=>s && !s.leaving)){ toast('정류장에 버스가 없어요'); sfx.honk(); return; }
   mode = 'fill'; sfx.board(1); drawItems(); drawBays();
 };
@@ -666,7 +715,8 @@ function fillBay(i){
   drawQueue(); drawBays({bump:i}); drawStat(); drawItems();
 }
 $('it-slot').onclick = ()=>{
-  if(over || items.slot <= 0 || bays.length >= MAX_BAYS) return;
+  if(over || bays.length >= MAX_BAYS) return;
+  if(items.slot <= 0){ offerBuy('slot'); return; }
   items.slot--; used++; mode = null;
   bays.push(null);
   sfx.board(4); drawBays({opened:bays.length-1}); drawItems(); toast('자리 +1'); kick();
@@ -760,10 +810,10 @@ function drawBays(flags={}){
   for(let i = bays.length; i < MAX_BAYS; i++){
     const d = document.createElement('button');
     const can = items && items.slot > 0 && !over;
-    d.className = 'bay locked' + (can ? '' : ' nope');
-    d.setAttribute('aria-label', can ? `${i+1}번 자리 열기 (자리 추가 아이템 사용)` : `${i+1}번 자리, 잠김`);
+    d.className = 'bay locked' + (over ? ' nope' : '');
+    d.setAttribute('aria-label', can ? `${i+1}번 자리 열기 (자리 추가 아이템 사용)` : `${i+1}번 자리, 잠김 (동전으로 열기)`);
     d.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2" fill="#fff"/><path d="M8 10 V7 a4 4 0 0 1 8 0 v3" stroke="#fff" stroke-width="2.4" fill="none"/></svg><small>${can ? '열기' : '잠김'}</small>`;
-    d.onclick = ()=>{ if(can) $('it-slot').click(); else { toast('자리 추가 아이템이 없어요'); sfx.honk(); } };
+    d.onclick = ()=>{ if(!over) $('it-slot').click(); };
     w.appendChild(d);
   }
 }
@@ -891,7 +941,7 @@ function checkEnd(){
   if(bays.some(s=>s&&s.leaving)) return;
   if(queue.length && bays.every(s=>s) && !bays.some(s=>s.v.color===queue[0])){
     // tow needs a free bay, so only fill (frees a bay) and slot can rescue a full stop
-    const canSave = items.slot > 0 || items.fill > 0;
+    const canSave = items.slot > 0 || items.fill > 0 || progress.coins >= Math.min(PRICE.slot, PRICE.fill);
     if(canSave){
       if(!stuckWarned){ stuckWarned = true; toast('막혔어요! 아이템!'); sfx.honk(); }
       const it=$('items'); it.classList.remove('nudge'); void it.offsetWidth; it.classList.add('nudge');
@@ -919,6 +969,9 @@ function finish(win){
     const pr = progress[diff];
     pr.stars[levelNo] = Math.max(pr.stars[levelNo]||0, stars);
     pr.unlocked = Math.max(pr.unlocked, Math.min(LEVEL_COUNT, levelNo+1));
+    const reward = (diff==='hard' ? 20 : 10) + stars*5;
+    progress.coins += reward; $('coinN').textContent = progress.coins;
+    $('ovText').textContent += ` 동전 +${reward}개!`;
     if(last && diff==='easy') $('ovText').textContent += ' 보통 모드를 다 깼어요! 어려운 모드에 도전해 보세요.';
     saveProgress(); sfx.win(); confetti();
   }
@@ -969,8 +1022,8 @@ function drawPicker(){
   $('tab-easy').classList.toggle('on', pickDiff==='easy'); $('tab-hard').classList.toggle('on', pickDiff==='hard');
   $('tab-easy').setAttribute('aria-selected', pickDiff==='easy'); $('tab-hard').setAttribute('aria-selected', pickDiff==='hard');
   $('modeNote').textContent = pickDiff==='hard'
-    ? '판이 크고 차가 더 촘촘해요. 정류장 4칸을 빈틈없이 써야 하고, 아이템은 견인차 1 · 섞기 1 · 채우기 1뿐이에요.'
-    : '처음이라면 여기부터. 아이템: 견인차 1 · 섞기 2 · 채우기 1 · 자리 추가 1';
+    ? '판이 크고 차가 더 촘촘해요. 정류장 4칸을 빈틈없이 써야 해요. 대신 깨면 동전을 두 배로 받아요.'
+    : '처음이라면 여기부터. 판을 깨면 동전을 받고, 다 쓴 아이템은 동전으로 사요.';
   const pr = progress[pickDiff], g = $('levelGrid'); g.innerHTML = '';
   for(let k=1;k<=LEVEL_COUNT;k++){
     const b = document.createElement('button'); const st = pr.stars[k]||0;

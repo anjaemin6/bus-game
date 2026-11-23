@@ -13,7 +13,7 @@ if (!pairs.length) pairs.push(['easy', 2], ['hard', 10]);
       progress.seen = {mystery:true, cover:true, tunnel:true, diag:true, amb:true, flip:true};
       diff = d; levelNo = k; initNow(); }, [d, k]);
     const ids = await pg.evaluate(() => removalOrder(vehicles).map(v => v.id));
-    const idle = () => pg.waitForFunction(() => !busy && !ticking && freeBay() >= 0 && !bays.some(s => s && s.leaving), null, { timeout: 30000 });
+    const idle = () => pg.waitForFunction(() => !busy && !ticking && freeBay() >= 0 && !bays.some(s => s && (s.leaving || s.coming)), null, { timeout: 30000 });
     for (const id of ids) { await idle(); await pg.waitForTimeout(400); await idle(); await pg.click('#veh-' + id); }
     await pg.waitForSelector('#overlay:not([hidden])', { timeout: 180000 });
     console.log(`${d === 'easy' ? '보통' : '어려움'} ${k}단계 →`, await pg.evaluate(() => document.getElementById('ovTitle').textContent));

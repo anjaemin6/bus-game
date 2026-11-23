@@ -71,6 +71,8 @@ button{font:inherit;cursor:pointer}
 .line{display:flex;flex-direction:column-reverse;justify-content:flex-start;gap:0;margin-left:46px;flex:1;min-width:0;height:clamp(64px,15vh,150px);max-height:clamp(64px,15vh,150px);overflow:hidden}
 .qline{display:flex;align-items:flex-end}
 .qline.rev{justify-content:flex-end}
+.carfly{position:fixed;z-index:14;pointer-events:none;transition:transform .32s cubic-bezier(.3,.1,.3,1)}
+.carfly svg{width:100%;height:100%;display:block;filter:drop-shadow(0 3px 2px rgba(0,0,0,.35))}
 .flyer{position:fixed;z-index:15;pointer-events:none;transition:transform .38s ease-in,opacity .3s ease-in .12s}
 .flyer svg{width:100%;height:100%;display:block}
 .pax{flex:0 0 auto;width:clamp(15px,2.9vh,28px);height:clamp(23px,4.5vh,43px);margin-right:-2px;margin-top:-5px;transition:transform .2s}
@@ -249,10 +251,8 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
     <div class="lv"><span class="sub"><span id="stat">1단계</span></span></div>
     <div class="tools">
       <button class="btn" id="questBtn">선물<small id="questSum" hidden></small><span class="dot" id="questDot" hidden>0</span></button>
-      <button class="btn" id="levelsBtn">단계</button>
-      <button class="btn" id="sound">소리</button>
-      <button class="btn" id="restart">다시</button>
-      <button class="btn" id="helpBtn" aria-label="놀이 방법">?</button>
+      <button class="btn" id="restart">↻ 다시</button>
+      <button class="btn" id="pauseBtn">❚❚ 멈춤</button>
     </div>
   </header>
   <div class="progress" aria-hidden="true"><i id="bar"></i></div>
@@ -311,6 +311,15 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
     <div class="levels" id="levelGrid"></div>
 
     <button class="btn" id="pickClose">닫기</button>
+  </div>
+</div>
+<div class="overlay" id="pausebox" hidden>
+  <div class="card">
+    <h2>멈춤</h2>
+    <button class="btn primary" id="resumeBtn">계속하기</button>
+    <button class="btn" id="levelsBtn">단계 고르기</button>
+    <button class="btn" id="sound">소리</button>
+    <button class="btn" id="helpBtn">놀이 방법</button>
   </div>
 </div>
 <div class="overlay" id="helpbox" hidden>
@@ -1012,7 +1021,7 @@ function drawItems(){
     if(k === 'slot') continue;   // 자리 추가는 버튼 대신 「+」 칸을 눌러서 쓴다
     $('it-'+k).disabled = over
       || (k==='shuffle' && !canShuffle())
-      || (k==='fill' && !bays.some(s=>s && !s.leaving))
+      || (k==='fill' && !bays.some(s=>s && !s.leaving && !s.coming))
       || (k==='tow' && !vehicles.some(v=>!v.gone));
   }
   $('coinN').textContent = progress.coins;
@@ -1050,7 +1059,9 @@ function openStore(){
   }
   $('store').hidden = false; $('stClose').focus();
 }
-$('helpBtn').onclick = ()=>{ $('helpbox').hidden = false; $('helpClose').focus(); };
+$('helpBtn').onclick = ()=>{ $('pausebox').hidden = true; $('helpbox').hidden = false; $('helpClose').focus(); };
+$('pauseBtn').onclick = ()=>{ if(!over){ $('pausebox').hidden = false; $('resumeBtn').focus(); } };
+$('resumeBtn').onclick = ()=>{ $('pausebox').hidden = true; };
 $('helpClose').onclick = ()=>{ $('helpbox').hidden = true; };
 $('it-shop').onclick = ()=>{ if(!over) openStore(); };
 $('stClose').onclick = ()=>{ $('store').hidden = true; };
@@ -1096,7 +1107,7 @@ $('it-fill').onclick = ()=>{
 // pull this bus's color from anywhere in the line until it is full, then it departs
 function fillBay(i){
   const s = bays[i];
-  if(mode!=='fill' || !s || s.leaving || over) return;
+  if(mode!=='fill' || !s || s.leaving || s.coming || over) return;
   mode = null; items.fill--; used++; questEvent('item');
   let need = s.v.cap - s.n;
   const got = need;
@@ -1239,6 +1250,19 @@ function drawQueue(){
   q.setAttribute('aria-label', `기다리는 손님 ${queue.length}명, 맨 앞은 ${NAME[queue[0]]}`);
   lastQueueLen = queue.length;
 }
+function driveToBay(v, sx, sy, bayIndex, done){
+  const to = $('bays').children[bayIndex];
+  if(!to){ done(); return; }
+  const b = to.getBoundingClientRect(), w = b.width*.62, h = b.height*.72;
+  const f = document.createElement('div'); f.className = 'carfly';
+  f.innerHTML = vehicleSVG(v.color, v.len, false, -1, v.cap, false, true);
+  Object.assign(f.style, {left: (sx - w/2)+'px', top: (sy - h/2)+'px', width: w+'px', height: h+'px'});
+  document.body.appendChild(f);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    f.style.transform = `translate(${b.left + b.width/2 - sx}px, ${b.top + b.height*.55 - sy}px)`;
+  }));
+  setTimeout(() => { f.remove(); done(); }, 340);
+}
 // 맨 앞 손님이 정류장 차로 들어가는 움직임
 function flyPax(color, bayIndex){
   if(document.querySelectorAll('.flyer').length > 10) return;
@@ -1261,9 +1285,11 @@ function drawBays(flags={}){
   bays.forEach((s,i)=>{
     const d = document.createElement('div');
     d.className = 'bay' + (s?' full':'') + (s&&s.leaving?' leaving':'') + (flags.arrive===i?' arrive':'') + (flags.bump===i?' bump':'') + (!s&&almost&&!over&&i>0?' warn':'') + (flags.opened===i?' opened':'') + (i===0?' vip':'');
-    if(s){
+    if(s && s.coming){
+      d.innerHTML = `<span class="num">${i}</span>`;
+    } else if(s){
       d.innerHTML = `<div class="mini">${vehicleSVG(s.v.color, s.v.len, false, -1, s.v.cap)}</div><span class="cnt">${s.n}/${s.v.cap}</span>`;
-      if(mode==='fill' && !s.leaving){ d.onclick = ()=>fillBay(i); d.setAttribute('role','button'); d.setAttribute('aria-label', `${i+1}번 버스 채우기`); }
+      if(mode==='fill' && !s.leaving && !s.coming){ d.onclick = ()=>fillBay(i); d.setAttribute('role','button'); d.setAttribute('aria-label', `${i+1}번 버스 채우기`); }
     } else d.innerHTML = i === 0 ? '<span class="viptag">VIP</span>' : `<span class="num">${i}</span>`;
     w.appendChild(d);
   });
@@ -1322,11 +1348,18 @@ function tap(v, el){
     const dist = (v.h ? (v.dir>0 ? N-v.c : v.c+v.len) : (v.dir>0 ? N-v.r : v.r+v.len)) + .5;
     el.style.transform = v.h ? `translateX(${v.dir*dist*cell}px)` : `translateY(${v.dir*dist*cell}px)`;
   }
+  // 빠져나간 곳(주차장 가장자리)에서 정류장 칸까지 달려간다
+  const br = $('board').getBoundingClientRect(), er = el.getBoundingClientRect();
+  const [mx, my] = v.diag ? [v.dx, v.dy] : v.h ? [v.dir, 0] : [0, v.dir];
+  const exitX = Math.min(br.right, Math.max(br.left, er.left + er.width/2 + mx*1e4));
+  const exitY = Math.min(br.bottom, Math.max(br.top, er.top + er.height/2 + my*1e4));
+  const sx = mx ? exitX : er.left + er.width/2, sy = my ? exitY : er.top + er.height/2;
   setTimeout(()=>{
     v.gone = true; el.remove();
-    bays[free] = {v, n:0, leaving:false};
-    busy = false; afterLeave(v); drawBays({arrive:free}); drawStat(); drawItems();
-    setTimeout(kick, 300);
+    const slot = {v, n:0, leaving:false, coming:true};   // 자리를 먼저 잡아 두고, 도착하면 손님을 태운다
+    bays[free] = slot;
+    busy = false; afterLeave(v); drawBays(); drawStat(); drawItems();
+    driveToBay(v, sx, sy, free, () => { slot.coming = false; drawBays({arrive: bays.indexOf(slot)}); drawItems(); setTimeout(kick, 120); });
   }, 430);
 }
 
@@ -1404,7 +1437,7 @@ function step(){
   ticking = false; if(over) return;
   if(queue.length){
     // passengers take the leftmost matching bus
-    const i = bays.findIndex(s=>s && !s.leaving && s.v.color===queue[0] && s.n<s.v.cap);
+    const i = bays.findIndex(s=>s && !s.leaving && !s.coming && s.v.color===queue[0] && s.n<s.v.cap);
     if(i>=0){
       const s = bays[i];
       flyPax(queue[0], i);
@@ -1496,7 +1529,7 @@ function confetti(){
 }
 function stopFx(){ cancelAnimationFrame(fxRaf); const cv=$('fx'); cv.getContext('2d').clearRect(0,0,cv.width,cv.height); }
 
-function syncSound(){ $('sound').textContent = soundOn ? '소리' : '무음'; }
+function syncSound(){ $('sound').textContent = soundOn ? '소리 켜짐' : '소리 꺼짐'; }
 $('sound').onclick = ()=>{ soundOn = !soundOn; syncSound(); try{ localStorage.setItem('bus-sound', soundOn?'on':'off'); }catch(e){} if(soundOn) sfx.board(3); };
 $('restart').onclick = init;
 $('ovBtn').onclick = ()=>{
@@ -1534,7 +1567,7 @@ function drawPicker(){
     g.appendChild(b);
   }
 }
-$('levelsBtn').onclick = ()=>openPicker();
+$('levelsBtn').onclick = ()=>{ $('pausebox').hidden = true; openPicker(); };
 $('tab-easy').onclick = ()=>{ pickDiff='easy'; drawPicker(); };
 $('tab-hard').onclick = ()=>{ pickDiff='hard'; drawPicker(); };
 $('pickClose').onclick = ()=>{ $('picker').hidden = true; };

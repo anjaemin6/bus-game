@@ -187,7 +187,7 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
         <path d="M6 13 L14 4 h4" stroke="#5a6577" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M18 4 v5 a2 2 0 0 1 -3 1" stroke="#5a6577" stroke-width="2.5" fill="none" stroke-linecap="round"/>
         <circle cx="8" cy="25" r="3.5" fill="#1b1e24"/><circle cx="23" cy="25" r="3.5" fill="#1b1e24"/></svg>
       견인차<span class="badge" id="n-tow">1</span></button>
-    <button class="item" id="it-shuffle" aria-label="섞기: 주차장 차 색깔 섞기">
+    <button class="item" id="it-shuffle" aria-label="섞기: 기다리는 손님 줄 섞기">
       <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 9 h6 c6 0 8 14 14 14 h4 M24 19 l4 4 l-4 4 M4 23 h6 c2 0 3.5 -1.5 4.5 -3.5 M18 11.5 c1 -1.5 3 -2.5 6 -2.5 h4 M24 5 l4 4 l-4 4" stroke="#8b5cf6" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
       섞기<span class="badge" id="n-shuffle">2</span></button>
     <button class="item" id="it-fill" aria-label="채우기: 정류장 버스 하나를 바로 꽉 채워 출발">
@@ -272,12 +272,32 @@ const HARD_PARAMS = [null,
   {n:8, count:22, colors:6, group:4, bus:.60},
 ];
 const LEVEL_COUNT = LEVEL_PARAMS.length - 1;
+// seats: small (2 spaces) 4 or 8, medium (3) 16 or 24, large (4) 40
+function pickCap(len, R, k, hard){
+  const up = k*.03 + (hard ? .15 : 0);
+  if(len === 2) return R() < .25 + up ? 8 : 4;
+  if(len === 3) return R() < .35 + up ? 24 : 16;
+  return 40;
+}
+// passengers come in groups that follow the clean removal order, shuffled inside each group
+function buildQueue(order, group, R){
+  const queue = [];
+  for(let g = 0; g < order.length; g += group){
+    const chunk = [];
+    order.slice(g, g+group).forEach(v => { for(let s = 0; s < v.cap; s++) chunk.push(v.color); });
+    for(let i = chunk.length-1; i > 0; i--){ const j = Math.floor(R()*(i+1)); [chunk[i],chunk[j]] = [chunk[j],chunk[i]]; }
+    queue.push(...chunk);
+  }
+  return queue;
+}
+// chance of a large bus per level (index = level number)
+const BIG = { easy:[0, 0,0,0,.10,.10,.12,.12,.15,.15,.15], hard:[0, .15,.15,.18,.18,.20,.20,.22,.22,.25,.25] };
 // items per mode; hard mode is meant to be cleared mostly by planning
 const MODE_ITEMS = { easy:{tow:1, shuffle:2, fill:1, slot:1}, hard:{tow:1, shuffle:1, fill:1, slot:0} };
 
 // Plays the intended order with the game's rules (leftmost bus boards first, 4 bays, no items).
 function solvesCleanly(L){
-  const N = L.n, vs = L.vehicles.map(v => ({...v, cap: v.len===3?6:4, gone:false}));
+  const N = L.n, vs = L.vehicles.map(v => ({...v, gone:false}));
   const queue = L.queue.slice(), bays = [null,null,null,null];
   const occ = (x,y) => vs.some(v => !v.gone && (v.h ? (y===v.r && x>=v.c && x<v.c+v.len) : (x===v.c && y>=v.r && y<v.r+v.len)));
   const free = v => { let x,y; if(v.h){x=v.dir>0?v.c+v.len:v.c-1;y=v.r}else{x=v.c;y=v.dir>0?v.r+v.len:v.r-1}
@@ -300,8 +320,8 @@ function makeLevel(k, mode = 'easy'){
     // listed in placement order: the clean solution removes them from the end (a, b, h, g, f, e, d, c)
     const L1 = [['c','Y',0,2,3,true,1],['d','G',4,1,2,false,1],['e','R',2,4,3,true,-1],['f','B',0,3,2,false,1],
       ['g','Y',5,3,2,false,-1],['h','G',4,0,2,true,-1],['b','B',2,0,2,false,-1],['a','R',0,0,2,true,-1]];
-    return { n:6, vehicles: L1.map(([id,color,c,r,len,h,dir]) => ({id,color,c,r,len,h,dir})),
-      queue: ('RRBRBBRB'+'GYGGYGYY'+'BRBRRBRBRR'+'GYYGYGYGYY').split('') };
+    const vehicles = L1.map(([id,color,c,r,len,h,dir]) => ({id,color,c,r,len,h,dir,cap: len===3 ? 16 : 4}));
+    return { n:6, vehicles, queue: buildQueue(vehicles.slice().reverse(), 2, seeded(7)) };
   }
   const P = (hard ? HARD_PARAMS : LEVEL_PARAMS)[k], N = P.n;
   for(let attempt = 0; attempt < 400; attempt++){
@@ -310,9 +330,10 @@ function makeLevel(k, mode = 'easy'){
     const inb = (x,y) => x>=0 && y>=0 && x<N && y<N;
     const vs = [];
     for(let i = 0; i < P.count; i++){
-      const want = R() < P.bus ? 3 : 2;
+      const roll = R(), big = BIG[hard ? 'hard' : 'easy'][k];
+      const want = roll < big ? 4 : roll < big + P.bus ? 3 : 2;
       const cands = [];
-      for(const len of [2,3]) for(const h of [true,false]) for(const dir of [1,-1])
+      for(const len of [2,3,4]) for(const h of [true,false]) for(const dir of [1,-1])
       for(let c = 0; c < N; c++) for(let r = 0; r < N; r++){
         const cs = []; let ok = true;
         for(let j = 0; j < len; j++){ const x = h?c+j:c, y = h?r:r+j; if(!inb(x,y) || grid[y][x] >= 0){ ok = false; break; } cs.push([x,y]); }
@@ -338,15 +359,8 @@ function makeLevel(k, mode = 'easy'){
     const palette = COLORSET.slice(0, P.colors);
     const colors = vs.map((_,i) => i < P.colors ? palette[i] : palette[Math.floor(R()*P.colors)]);
     for(let i = colors.length-1; i > 0; i--){ const j = Math.floor(R()*(i+1)); [colors[i],colors[j]] = [colors[j],colors[i]]; }
-    const vehicles = vs.map((v,i) => ({id:'v'+i, color:colors[i], c:v.c, r:v.r, len:v.len, h:v.h, dir:v.dir}));
-    const order = vehicles.slice().reverse();
-    const queue = [];
-    for(let g = 0; g < order.length; g += P.group){
-      const chunk = [];
-      order.slice(g, g+P.group).forEach(v => { for(let s = 0; s < (v.len===3?6:4); s++) chunk.push(v.color); });
-      for(let i = chunk.length-1; i > 0; i--){ const j = Math.floor(R()*(i+1)); [chunk[i],chunk[j]] = [chunk[j],chunk[i]]; }
-      queue.push(...chunk);
-    }
+    const vehicles = vs.map((v,i) => ({id:'v'+i, color:colors[i], c:v.c, r:v.r, len:v.len, h:v.h, dir:v.dir, cap:pickCap(v.len, R, k, hard)}));
+    const queue = buildQueue(vehicles.slice().reverse(), P.group, R);
     const level = {n:N, vehicles, queue};
     if(solvesCleanly(level)) return level;
   }
@@ -357,18 +371,19 @@ let vehicles, bays, queue, mistakes, busy, over, ticking, startAt, soundOn = tru
 try{ soundOn = localStorage.getItem('bus-sound') !== 'off'; }catch(e){}
 const $ = id => document.getElementById(id);
 const C = c => `var(--c-${c})`;
+const KIND = {4:'승용차', 8:'승합차', 16:'미니버스', 24:'버스', 40:'큰 버스'};
 
 /* ---------- drawings ---------- */
-function vehicleSVG(color, len, h, dir){
+function vehicleSVG(color, len, h, dir, cap){
   const L = len*100, W = 100;
-  const bus = len === 3;
+  const bus = len >= 3;
   // drawn facing +x in a L×W box, then rotated into place
   let t = '';
   if(h && dir<0) t = `translate(${L},${W}) rotate(180)`;
   if(!h && dir>0) t = `translate(${W},0) rotate(90)`;
   if(!h && dir<0) t = `translate(0,${L}) rotate(-90)`;
   const vb = h ? `0 0 ${L} ${W}` : `0 0 ${W} ${L}`;
-  const wheels = (bus ? [40, L-120, L-70] : [36, L-62]).map(x =>
+  const wheels = (len===4 ? [40, 150, L-120, L-70] : bus ? [40, L-120, L-70] : [36, L-62]).map(x =>
     `<rect x="${x}" y="4" width="34" height="14" rx="5" fill="#1b1e24"/><rect x="${x}" y="82" width="34" height="14" rx="5" fill="#1b1e24"/>`).join('');
   let top;
   if(bus){
@@ -379,7 +394,6 @@ function vehicleSVG(color, len, h, dir){
       <rect x="4" y="12" width="${L-8}" height="76" rx="16" fill="url(#shade)"/>
       ${wins.join('')}
       <rect x="34" y="34" width="${L-120}" height="32" rx="8" fill="#fff" opacity=".22"/>
-      <rect x="${L/2-40}" y="38" width="44" height="24" rx="5" fill="#fff" opacity=".35"/>
       <path d="M${L-52} 16 h24 q20 0 20 20 v28 q0 20 -20 20 h-24 z" fill="#1c3a52"/>
       <path d="M${L-50} 20 h20 q14 0 14 16 v8 z" fill="#fff" opacity=".25"/>`;
   } else {
@@ -394,11 +408,15 @@ function vehicleSVG(color, len, h, dir){
   }
   const lights = `<rect x="${L-14}" y="18" width="8" height="16" rx="3" fill="#fff6c2"/><rect x="${L-14}" y="66" width="8" height="16" rx="3" fill="#fff6c2"/>
     <rect x="6" y="20" width="6" height="12" rx="2" fill="#ff5a5a"/><rect x="6" y="68" width="6" height="12" rx="2" fill="#ff5a5a"/>`;
-  const arrow = `<path d="M${L/2+(bus?40:0)-8} 36 l20 14 l-20 14" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/>`;
-  const sym = `<text x="${bus?L/2-30:103}" y="58" font-size="22" text-anchor="middle" fill="#fff" opacity=".9" font-family="sans-serif">${SYM[color]}</text>`;
+  const ax = bus ? L-96 : 166;
+  const arrow = `<path d="M${ax} 38 l16 12 l-16 12" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/>`;
+  // seat count badge, drawn upright whatever way the vehicle faces
+  const bx = bus ? L/2-20 : 103, by = 50;
+  const [px,py] = !t ? [bx,by] : (h ? [L-bx, W-by] : dir>0 ? [W-by, bx] : [by, L-bx]);
+  const badge = `<circle cx="${px}" cy="${py}" r="32" fill="#fff" opacity=".95"/><text x="${px}" y="${py+12}" font-size="${cap>=10?32:38}" font-weight="700" text-anchor="middle" fill="#1d2430" font-family="sans-serif">${cap}</text>`;
   return `<svg viewBox="${vb}" aria-hidden="true"><defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#fff" stop-opacity=".25"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".22"/></linearGradient></defs>
-    <g transform="${t}">${wheels}${top}${lights}${arrow}${sym}</g></svg>`;
+    <g transform="${t}">${wheels}${top}${lights}${arrow}</g>${badge}</svg>`;
 }
 function personSVG(color){
   return `<svg viewBox="0 0 26 40" aria-hidden="true">
@@ -438,7 +456,7 @@ function buzz(ms){ try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){} 
 function init(){
   current = makeLevel(levelNo, diff); N = current.n;
   $('board').style.setProperty('--n', N);
-  vehicles = current.vehicles.map(v => ({...v, cap:v.len===3?6:4, gone:false}));
+  vehicles = current.vehicles.map(v => ({...v, cap:v.cap, gone:false}));
   bays = Array(START_BAYS).fill(null);
   queue = current.queue.slice(); lastQueueLen = queue.length; stuckWarned = false;
   rescued = false; mistakes = 0; used = 0; busy = false; over = false; startAt = Date.now();
@@ -448,10 +466,7 @@ function init(){
 }
 
 /* ---------- items ---------- */
-function canShuffle(){
-  const left = vehicles.filter(v=>!v.gone);
-  return [2,3].some(L => new Set(left.filter(v=>v.len===L).map(v=>v.color)).size > 1);
-}
+function canShuffle(){ return new Set(queue).size > 1; }
 function drawItems(){
   for(const k of ['tow','shuffle','fill','slot']){
     $('n-'+k).textContent = items[k];
@@ -474,19 +489,14 @@ $('it-tow').onclick = ()=>{
   if(bays.indexOf(null) < 0){ toast('정류장 자리가 없어요'); sfx.honk(); return; }
   mode = 'tow'; sfx.board(1); drawItems();
 };
-// shuffle colors only between cars of the same size, so seats per color still match the passengers
+// shuffle the passengers waiting in line
 $('it-shuffle').onclick = ()=>{
   if(over || busy || items.shuffle <= 0 || !canShuffle()) return;
   items.shuffle--; used++; mode = null; drawBays();
-  for(const L of [2,3]){
-    const group = vehicles.filter(v=>!v.gone && v.len===L);
-    const cols = group.map(v=>v.color);
-    for(let i=cols.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [cols[i],cols[j]]=[cols[j],cols[i]]; }
-    group.forEach((v,i)=>v.color=cols[i]);
-  }
-  sfx.board(2); sfx.board(5); drawBoard();
-  $('board').querySelectorAll('.veh').forEach(e=>e.classList.add('spin'));
-  toast('섞기!'); drawItems();
+  for(let i=queue.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [queue[i],queue[j]]=[queue[j],queue[i]]; }
+  sfx.board(2); sfx.board(5); lastQueueLen = queue.length; drawQueue();
+  $('queue').querySelectorAll('.pax').forEach(e=>e.classList.add('walkin'));
+  toast('손님 섞기!'); drawItems(); kick();
 };
 $('it-fill').onclick = ()=>{
   if(over) return;
@@ -530,8 +540,8 @@ function drawBoard(){
     el.style.left = v.c/N*100+'%'; el.style.top = v.r/N*100+'%';
     el.style.width = (v.h?v.len:1)/N*100+'%'; el.style.height = (v.h?1:v.len)/N*100+'%';
     const way = v.h ? (v.dir>0?'오른쪽':'왼쪽') : (v.dir>0?'아래':'위');
-    el.setAttribute('aria-label', `${NAME[v.color]} ${v.len===3?'버스':'승합차'}, ${way}으로 나감`);
-    el.innerHTML = vehicleSVG(v.color, v.len, v.h, v.dir);
+    el.setAttribute('aria-label', `${NAME[v.color]} ${KIND[v.cap]}(${v.cap}명), ${way}으로 나감`);
+    el.innerHTML = vehicleSVG(v.color, v.len, v.h, v.dir, v.cap);
     el.onclick = () => tap(v, el);
     b.appendChild(el);
   }
@@ -556,7 +566,7 @@ function drawBays(flags={}){
     const d = document.createElement('div');
     d.className = 'bay' + (s?' full':'') + (s&&s.leaving?' leaving':'') + (flags.arrive===i?' arrive':'') + (flags.bump===i?' bump':'') + (!s&&almost&&!over?' warn':'') + (flags.opened===i?' opened':'');
     if(s){
-      d.innerHTML = `<div class="mini">${vehicleSVG(s.v.color, s.v.len, false, -1)}</div><span class="cnt">${s.n}/${s.v.cap}</span>`;
+      d.innerHTML = `<div class="mini">${vehicleSVG(s.v.color, s.v.len, false, -1, s.v.cap)}</div><span class="cnt">${s.n}/${s.v.cap}</span>`;
       if(mode==='fill' && !s.leaving){ d.onclick = ()=>fillBay(i); d.setAttribute('role','button'); d.setAttribute('aria-label', `${i+1}번 버스 채우기`); }
     } else d.innerHTML = `<span class="num">${i+1}</span>`;
     w.appendChild(d);
@@ -567,7 +577,7 @@ function drawBays(flags={}){
     const can = items && items.slot > 0 && !over;
     d.className = 'bay locked' + (can ? '' : ' nope');
     d.setAttribute('aria-label', can ? `${i+1}번 자리 열기 (자리 추가 아이템 사용)` : `${i+1}번 자리, 잠김`);
-    d.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2" fill="#fff"/><path d="M8 10 V7 a4 4 0 0 1 8 0 v3" stroke="#fff" stroke-width="2.4" fill="none"/></svg><small>${can ? '눌러서 열기' : '잠김'}</small>`;
+    d.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2" fill="#fff"/><path d="M8 10 V7 a4 4 0 0 1 8 0 v3" stroke="#fff" stroke-width="2.4" fill="none"/></svg><small>${can ? '열기' : '잠김'}</small>`;
     d.onclick = ()=>{ if(can) $('it-slot').click(); else { toast('자리 추가 아이템이 없어요'); sfx.honk(); } };
     w.appendChild(d);
   }
@@ -616,7 +626,7 @@ function tap(v, el){
   }, 430);
 }
 
-function kick(){ if(!ticking){ ticking = true; setTimeout(step, 170); } }
+function kick(){ if(!ticking){ ticking = true; setTimeout(step, 70); } }
 function step(){
   ticking = false; if(over) return;
   if(queue.length){

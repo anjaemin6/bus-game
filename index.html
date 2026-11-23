@@ -594,9 +594,10 @@ function removalOrder(vs){
  1) 판을 거의 다 채울 때까지 차를 빈칸에 끼워 넣고
  2) 바깥쪽부터 빠질 수 있는 차를 하나씩 빼면서 그 차의 방향을 정한다.
  뺀 순서를 거꾸로 하면 '배치 순서'가 되므로 나머지 코드(손님 줄, 검사)는 그대로 쓴다. */
+// 원작 스크린샷처럼 뒤로 갈수록 12×12에 차 55~60대까지
 function denseSize(k, hard){
-  if(hard) return { n: k<=4 ? 7 : k<=10 ? 8 : k<=18 ? 9 : k<=26 ? 10 : 11, fill: Math.min(.96, .85 + k*.004) };
-  return { n: k<=5 ? 6 : k<=10 ? 7 : k<=17 ? 8 : k<=24 ? 9 : 10, fill: Math.min(.93, .78 + k*.005) };
+  if(hard) return { n: k<=3 ? 8 : k<=8 ? 9 : k<=14 ? 10 : k<=20 ? 11 : 12, fill: Math.min(.96, .88 + k*.003) };
+  return { n: k<=3 ? 7 : k<=7 ? 8 : k<=12 ? 9 : k<=18 ? 10 : k<=24 ? 11 : 12, fill: Math.min(.95, .82 + k*.005) };
 }
 function packBoard(N, fill, R, wantLen){
   const grid = Array.from({length:N}, () => Array(N).fill(-1));

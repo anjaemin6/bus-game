@@ -93,14 +93,17 @@ button{font:inherit;cursor:pointer}
 .board{position:relative;aspect-ratio:1;width:100%;max-width:100%;border-radius:18px;overflow:hidden;
   background:var(--asphalt);box-shadow:inset 0 0 0 6px var(--asphalt2),0 5px 0 rgba(0,0,0,.12)}
 .board::before{content:"";position:absolute;inset:0;
-  background-image:linear-gradient(90deg,var(--stall) 2px,transparent 2px),linear-gradient(var(--stall) 2px,transparent 2px);
-  background-size:calc(100%/var(--n,6)) calc(100%/var(--n,6));opacity:.16}
+  background:radial-gradient(circle at 20% 15%,rgba(255,255,255,.06),transparent 45%),radial-gradient(circle at 80% 85%,rgba(0,0,0,.18),transparent 50%);}
 .veh{position:absolute;padding:3%;border:0;background:none;transition:transform .42s cubic-bezier(.55,0,.85,.35);z-index:1}
 .veh svg{width:100%;height:100%;display:block;overflow:visible;filter:drop-shadow(0 4px 3px rgba(0,0,0,.4))}
 .veh:active svg{transform:scale(.96)}
 .veh.shake svg{animation:shake .35s}
 .veh.blocker svg{animation:flash .5s}
 .veh.going{z-index:3}
+.flipmark{position:absolute;right:-4px;top:-4px;width:22px;height:22px;border-radius:50%;background:#ff7a1a;color:#fff;display:grid;place-items:center;
+  font-size:15px;line-height:1;font-weight:700;box-shadow:0 2px 0 rgba(0,0,0,.3);pointer-events:none;z-index:2}
+.veh.turned svg{animation:turned .4s}
+@keyframes turned{50%{transform:scaleX(.2)}}
 .veh.diag{transform-origin:50% 50%}
 .veh.diag svg{filter:drop-shadow(0 3px 2px rgba(0,0,0,.4))}
 .dbadge{position:absolute;left:50%;top:50%;border-radius:50%;background:#fff;color:#1d2430;display:grid;place-items:center;
@@ -423,9 +426,10 @@ function solvesCleanly(L){
 //  tunnel: a queue of cars that pull out one by one into the same spot
 //  diag: share of cars parked at 45 degrees
 //  amb: white ambulances (24 seats) that only pick up patients in white
+//  flip: cars that turn around (front <-> back) when tapped while blocked
 function features(k, hard){
-  if(hard) return { amb: k>=18 ? 2 : k>=6 ? 1 : 0, diag: k>=15 ? .35 : k>=4 ? .25 : 0, mystery: k>=15 ? .3 : .25, covers: k>=15 ? 3 : k>=6 ? 2 : k>=3 ? 1 : 0, tunnels: k>=18 ? 3 : k>=8 ? 2 : k>=5 ? 1 : 0 };
-  return { amb: k>=24 ? 2 : k>=14 ? 1 : 0, diag: k>=20 ? .3 : k>=12 ? .2 : 0, mystery: k>=20 ? .25 : k>=4 ? .2 : 0, covers: k>=20 ? 3 : k>=9 ? 2 : k>=7 ? 1 : 0, tunnels: k>=22 ? 3 : k>=15 ? 2 : k>=9 ? 1 : 0 };
+  if(hard) return { flip: k>=8 ? .15 : 0, amb: k>=18 ? 2 : k>=6 ? 1 : 0, diag: k>=15 ? .35 : k>=4 ? .25 : 0, mystery: k>=15 ? .3 : .25, covers: k>=15 ? 3 : k>=6 ? 2 : k>=3 ? 1 : 0, tunnels: k>=18 ? 3 : k>=8 ? 2 : k>=5 ? 1 : 0 };
+  return { flip: k>=17 ? .12 : 0, amb: k>=24 ? 2 : k>=14 ? 1 : 0, diag: k>=20 ? .3 : k>=12 ? .2 : 0, mystery: k>=20 ? .25 : k>=4 ? .2 : 0, covers: k>=20 ? 3 : k>=9 ? 2 : k>=7 ? 1 : 0, tunnels: k>=22 ? 3 : k>=15 ? 2 : k>=9 ? 1 : 0 };
 }
 // clean solution: reverse placement order, each tunnel's cars right after the car parked in front of it
 function removalOrder(vs){
@@ -500,6 +504,7 @@ function makeLevel(k, mode = 'easy'){
       }
     }
     order.forEach((v,i) => { if(i >= 1 && !v.amb && R() < F.mystery) v.mystery = true; });
+    if(F.flip) order.forEach(v => { if(!v.mystery && R() < F.flip) v.flip = true; });
     const spots = order.map((v,i) => [v,i]).filter(([v,i]) => i >= 2 && !v.mystery && !v.diag);
     for(let c = 0; c < F.covers && spots.length; c++){
       const [v,i] = spots.splice(Math.floor(R()*spots.length), 1)[0];
@@ -790,6 +795,7 @@ function drawBoard(flash){
       el.innerHTML = vehicleSVG(hidden ? 'X' : v.color, v.len, true, 1, 0, true)
         + `<span class="dbadge" style="width:${px*.5}px;height:${px*.5}px;font-size:${px*.3}px;transform:translate(-50%,-50%) rotate(${-d.ang}deg)">${hidden ? '?' : v.cap}</span>`;
     } else el.innerHTML = vehicleSVG(hidden ? 'X' : v.color, v.len, v.h, v.dir, hidden ? '?' : v.cap);
+    if(v.flip) el.insertAdjacentHTML('beforeend', '<span class="flipmark" aria-hidden="true">⟲</span>');
     if(flash && flash.has(v)) el.classList.add(flash.get(v));
     el.onclick = () => tap(v, el);
     b.appendChild(el);
@@ -857,6 +863,14 @@ function tap(v, el){
     return;
   }
   const blk = blockerOf(v);
+  // a turn-around car that is blocked spins to face the other way instead of honking
+  if(blk && v.flip){
+    if(v.diag){ v.c += (v.len-1)*v.dx; v.r += (v.len-1)*v.dy; v.dx = -v.dx; v.dy = -v.dy; }
+    else v.dir = -v.dir;
+    sfx.board(3); buzz(10);
+    revealFree(); drawBoard(new Map([[v, 'turned']])); drawItems();
+    return;
+  }
   if(blk || free<0){
     mistakes++; sfx.honk(); buzz(40);
     el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
@@ -905,6 +919,8 @@ function afterLeave(left){
 const FEATURE_INFO = {
   mystery: { title: '새로운 차: 물음표 차', text: '색깔이 가려진 까만 차예요. 앞길이 뚫리면 진짜 색깔이 보여요.',
     pic: () => `<div class="sample">${vehicleSVG('X', 2, true, 1, '?')}</div>` },
+  flip: { title: '새로운 차: 방향 바뀌는 차', text: '주황색 동그란 화살표가 붙은 차예요. 앞이 막혔을 때 누르면 앞뒤 방향이 바뀌어요. 앞이 뚫려 있으면 그대로 빠져나가요.',
+    pic: () => `<div class="sample" style="width:160px;height:80px;position:relative">${vehicleSVG('G', 2, true, 1, 8)}<span class="flipmark" style="right:0;top:0">⟲</span></div>` },
   amb: { title: '새로운 차: 구급차', text: '하얀 옷에 빨간 십자가를 단 환자 손님은 구급차만 태울 수 있어요. 구급차는 24명이 타요.',
     pic: () => `<div class="sample" style="width:180px;height:60px">${vehicleSVG('W', 3, true, 1, 24)}</div>` },
   diag: { title: '새로운 차: 대각선 차', text: '비스듬히 선 차예요. 화살표 쪽 대각선으로 빠져나가요. 모서리끼리 붙은 두 차 사이로는 못 지나가요.',
@@ -923,6 +939,7 @@ function showIntro(){
   if(tunnels.length && !progress.seen.tunnel) introQueue.push('tunnel');
   if(vehicles.some(v => v.diag) && !progress.seen.diag) introQueue.push('diag');
   if(vehicles.some(v => v.amb) && !progress.seen.amb) introQueue.push('amb');
+  if(vehicles.some(v => v.flip) && !progress.seen.flip) introQueue.push('flip');
   nextIntro();
 }
 function nextIntro(){

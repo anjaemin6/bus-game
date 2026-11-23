@@ -68,7 +68,11 @@ button{font:inherit;cursor:pointer}
   display:flex;align-items:flex-end;gap:2px;padding:6px 8px 4px;overflow:hidden}
 .sign{position:absolute;left:6px;bottom:8px;font-family:var(--display);font-size:13px;color:#fff;background:#2f7fe8;
   padding:2px 8px;border-radius:6px;z-index:2}
-.line{display:flex;flex-wrap:wrap-reverse;align-items:flex-end;align-content:flex-start;gap:0;margin-left:46px;flex:1;min-width:0;height:clamp(64px,15vh,150px);max-height:clamp(64px,15vh,150px);overflow:hidden}
+.line{display:flex;flex-direction:column-reverse;justify-content:flex-start;gap:0;margin-left:46px;flex:1;min-width:0;height:clamp(64px,15vh,150px);max-height:clamp(64px,15vh,150px);overflow:hidden}
+.qline{display:flex;align-items:flex-end}
+.qline.rev{justify-content:flex-end}
+.flyer{position:fixed;z-index:15;pointer-events:none;transition:transform .38s ease-in,opacity .3s ease-in .12s}
+.flyer svg{width:100%;height:100%;display:block}
 .pax{flex:0 0 auto;width:clamp(15px,2.9vh,28px);height:clamp(23px,4.5vh,43px);margin-right:-2px;margin-top:-5px;transition:transform .2s}
 .run{display:inline-flex;align-items:flex-end;gap:0;padding:2px 4px 2px 2px;border-radius:10px;
   background:color-mix(in srgb, var(--rc) 22%, transparent);border:2px solid color-mix(in srgb, var(--rc) 55%, transparent)}
@@ -1217,13 +1221,38 @@ let lastQueueLen = 0;
 function drawQueue(){
   const q = $('queue'); q.innerHTML='';
   if(!queue.length){ q.innerHTML='<span class="more">모두 탔어요!</span>'; return; }
-  // 원작처럼 숫자 없이 사람들을 촘촘하게 세워서 보여 준다 (맨 앞은 왼쪽 아래)
-  const show = Math.min(queue.length, 84);
-  let html = '';
-  for(let i = 0; i < show; i++) html += `<span class="pax${i===0?' first':''}">${personSVG(queue[i])}</span>`;
-  q.innerHTML = html;
+  // 원작처럼 손님이 한 줄로 구불구불 이어지게: 맨 아래 줄은 왼쪽→오른쪽, 그 위 줄은 오른쪽→왼쪽 …
+  const probe = document.createElement('span'); probe.className = 'pax'; q.appendChild(probe);
+  const pr = probe.getBoundingClientRect(); q.innerHTML = '';
+  const pw = Math.max(10, pr.width - 2), ph = Math.max(16, pr.height - 5);
+  const perRow = Math.max(4, Math.floor((q.clientWidth - 8) / pw));
+  const rows = Math.max(1, Math.floor((q.clientHeight + 4) / ph));
+  const show = Math.min(queue.length, perRow * rows);
+  for(let r = 0; r * perRow < show; r++){
+    const row = document.createElement('div');
+    row.className = 'qline' + (r % 2 ? ' rev' : '');
+    let html = '';
+    for(let i = r*perRow; i < Math.min(show, (r+1)*perRow); i++) html += `<span class="pax${i===0?' first':''}">${personSVG(queue[i])}</span>`;
+    row.innerHTML = html;
+    q.appendChild(row);
+  }
   q.setAttribute('aria-label', `기다리는 손님 ${queue.length}명, 맨 앞은 ${NAME[queue[0]]}`);
   lastQueueLen = queue.length;
+}
+// 맨 앞 손님이 정류장 차로 들어가는 움직임
+function flyPax(color, bayIndex){
+  if(document.querySelectorAll('.flyer').length > 10) return;
+  const from = document.querySelector('#queue .pax.first'), to = $('bays').children[bayIndex];
+  if(!from || !to) return;
+  const a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
+  const f = document.createElement('div'); f.className = 'flyer'; f.innerHTML = personSVG(color);
+  Object.assign(f.style, {left: a.left+'px', top: a.top+'px', width: a.width+'px', height: a.height+'px'});
+  document.body.appendChild(f);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    f.style.transform = `translate(${b.left + b.width/2 - a.left - a.width/2}px, ${b.top + b.height*.45 - a.top - a.height/2}px) scale(.55)`;
+    f.style.opacity = '0';
+  }));
+  setTimeout(() => f.remove(), 500);
 }
 function drawBays(flags={}){
   const w = $('bays'); w.innerHTML='';
@@ -1378,6 +1407,7 @@ function step(){
     const i = bays.findIndex(s=>s && !s.leaving && s.v.color===queue[0] && s.n<s.v.cap);
     if(i>=0){
       const s = bays[i];
+      flyPax(queue[0], i);
       const who = queue.shift(); s.n++; sfx.board(s.n);
       questEvent('pax'); if(who === 'W') questEvent('patient');
       if(s.n===s.v.cap){

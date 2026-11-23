@@ -101,9 +101,9 @@ button{font:inherit;cursor:pointer}
   text-shadow:0 3px 0 rgba(0,0,0,.4);pointer-events:none;z-index:5;white-space:nowrap;animation:toast 1s forwards}
 @keyframes toast{0%{opacity:0;transform:translate(-50%,-30%) scale(.7)}20%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-90%)}}
 
-.items{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.item{position:relative;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 6px;border-radius:14px;
-  border:2px solid var(--line);background:var(--panel);color:var(--fg);font-family:var(--display);font-size:16px;box-shadow:0 4px 0 var(--line)}
+.items{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.item{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 4px;border-radius:14px;
+  border:2px solid var(--line);background:var(--panel);color:var(--fg);font-family:var(--display);font-size:15px;white-space:nowrap;box-shadow:0 4px 0 var(--line)}
 .item:active{transform:translateY(2px);box-shadow:0 2px 0 var(--line)}
 .item svg{width:26px;height:26px;flex:0 0 auto}
 .item .badge{position:absolute;top:-8px;right:-6px;min-width:24px;height:24px;border-radius:99px;background:var(--accent);color:#fff;
@@ -113,6 +113,10 @@ button{font:inherit;cursor:pointer}
 .item.on{border-color:var(--accent);background:var(--accent);color:#fff;box-shadow:0 4px 0 #c75a0c}
 .items.nudge .item:not(:disabled){animation:nudge .5s 2}
 @keyframes nudge{50%{transform:translateY(-6px)}}
+.bays.picking .bay.full:not(.leaving){outline:3px solid #fff;outline-offset:-3px;cursor:pointer;animation:glow .6s infinite alternate}
+@keyframes glow{to{outline-color:var(--accent)}}
+.veh.spin svg{animation:spin .45s}
+@keyframes spin{50%{transform:scale(.6) rotate(180deg)}}
 .board.towing{box-shadow:inset 0 0 0 6px var(--accent),0 5px 0 rgba(0,0,0,.12)}
 .veh.lift{transform:scale(1.25)!important;opacity:0;transition:transform .45s ease-in,opacity .45s ease-in}
 .hint{font-family:var(--display);font-size:16px;color:var(--accent);text-align:center;margin:0;min-height:1.4em}
@@ -177,9 +181,13 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
         <path d="M6 13 L14 4 h4" stroke="#5a6577" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M18 4 v5 a2 2 0 0 1 -3 1" stroke="#5a6577" stroke-width="2.5" fill="none" stroke-linecap="round"/>
         <circle cx="8" cy="25" r="3.5" fill="#1b1e24"/><circle cx="23" cy="25" r="3.5" fill="#1b1e24"/></svg>
       견인차<span class="badge" id="n-tow">1</span></button>
-    <button class="item" id="it-swap" aria-label="줄 바꾸기: 맨 앞 손님을 맨 뒤로">
-      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 11 h18 l-5 -5 M27 21 h-18 l5 5" stroke="#2f7fe8" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      줄 바꾸기<span class="badge" id="n-swap">2</span></button>
+    <button class="item" id="it-shuffle" aria-label="섞기: 주차장 차 색깔 섞기">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 9 h6 c6 0 8 14 14 14 h4 M24 19 l4 4 l-4 4 M4 23 h6 c2 0 3.5 -1.5 4.5 -3.5 M18 11.5 c1 -1.5 3 -2.5 6 -2.5 h4 M24 5 l4 4 l-4 4" stroke="#8b5cf6" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      섞기<span class="badge" id="n-shuffle">2</span></button>
+    <button class="item" id="it-fill" aria-label="채우기: 정류장 버스 하나를 바로 꽉 채워 출발">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="4" width="22" height="22" rx="5" fill="#2f7fe8"/><rect x="9" y="8" width="14" height="7" rx="2" fill="#bfe3ff"/>
+        <circle cx="11" cy="20" r="2" fill="#fff"/><circle cx="16" cy="20" r="2" fill="#fff"/><circle cx="21" cy="20" r="2" fill="#fff"/><rect x="8" y="26" width="5" height="4" rx="1.5" fill="#1b1e24"/><rect x="19" y="26" width="5" height="4" rx="1.5" fill="#1b1e24"/></svg>
+      채우기<span class="badge" id="n-fill">1</span></button>
     <button class="item" id="it-slot" aria-label="자리 추가: 정류장 한 칸 늘리기">
       <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="6" width="24" height="20" rx="4" fill="none" stroke="#1fa36a" stroke-width="3" stroke-dasharray="4 3"/><path d="M16 11 v10 M11 16 h10" stroke="#1fa36a" stroke-width="3.2" stroke-linecap="round"/></svg>
       자리 추가<span class="badge" id="n-slot">1</span></button>
@@ -259,7 +267,7 @@ const HARD_PARAMS = [null,
 ];
 const LEVEL_COUNT = LEVEL_PARAMS.length - 1;
 // items per mode; hard mode is meant to be cleared mostly by planning
-const MODE_ITEMS = { easy:{tow:1, swap:2, slot:1}, hard:{tow:1, swap:1, slot:0} };
+const MODE_ITEMS = { easy:{tow:1, shuffle:2, fill:1, slot:1}, hard:{tow:1, shuffle:1, fill:1, slot:0} };
 
 // Plays the intended order with the game's rules (leftmost bus boards first, 4 bays, no items).
 function solvesCleanly(L){
@@ -434,14 +442,24 @@ function init(){
 }
 
 /* ---------- items ---------- */
+function canShuffle(){
+  const left = vehicles.filter(v=>!v.gone);
+  return [2,3].some(L => new Set(left.filter(v=>v.len===L).map(v=>v.color)).size > 1);
+}
 function drawItems(){
-  for(const k of ['tow','swap','slot']){
+  for(const k of ['tow','shuffle','fill','slot']){
     $('n-'+k).textContent = items[k];
-    $('it-'+k).disabled = over || items[k] <= 0 || (k==='swap' && queue.length < 2) || (k==='tow' && !vehicles.some(v=>!v.gone));
+    $('it-'+k).disabled = over || items[k] <= 0
+      || (k==='shuffle' && !canShuffle())
+      || (k==='fill' && !bays.some(s=>s && !s.leaving))
+      || (k==='tow' && !vehicles.some(v=>!v.gone));
   }
   $('it-tow').classList.toggle('on', mode==='tow');
+  $('it-fill').classList.toggle('on', mode==='fill');
   $('board').classList.toggle('towing', mode==='tow');
-  $('hint').textContent = mode==='tow' ? '꺼낼 차를 누르세요 (다시 누르면 취소)' : '';
+  $('bays').classList.toggle('picking', mode==='fill');
+  $('hint').textContent = mode==='tow' ? '꺼낼 차를 누르세요 (다시 누르면 취소)'
+    : mode==='fill' ? '꽉 채울 정류장 버스를 누르세요 (다시 누르면 취소)' : '';
 }
 $('it-tow').onclick = ()=>{
   if(over) return;
@@ -449,12 +467,38 @@ $('it-tow').onclick = ()=>{
   if(bays.indexOf(null) < 0){ toast('정류장 자리가 없어요'); sfx.honk(); return; }
   mode = 'tow'; sfx.board(1); drawItems();
 };
-$('it-swap').onclick = ()=>{
-  if(over || busy || queue.length < 2 || items.swap <= 0) return;
-  items.swap--; used++;
-  queue.push(queue.shift());
-  sfx.board(2); toast('줄 바꿈!'); drawQueue(); drawItems(); kick();
+// shuffle colors only between cars of the same size, so seats per color still match the passengers
+$('it-shuffle').onclick = ()=>{
+  if(over || busy || items.shuffle <= 0 || !canShuffle()) return;
+  items.shuffle--; used++; mode = null; drawBays();
+  for(const L of [2,3]){
+    const group = vehicles.filter(v=>!v.gone && v.len===L);
+    const cols = group.map(v=>v.color);
+    for(let i=cols.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [cols[i],cols[j]]=[cols[j],cols[i]]; }
+    group.forEach((v,i)=>v.color=cols[i]);
+  }
+  sfx.board(2); sfx.board(5); drawBoard();
+  $('board').querySelectorAll('.veh').forEach(e=>e.classList.add('spin'));
+  toast('섞기!'); drawItems();
 };
+$('it-fill').onclick = ()=>{
+  if(over) return;
+  if(mode==='fill'){ mode=null; drawItems(); drawBays(); return; }
+  if(!bays.some(s=>s && !s.leaving)){ toast('정류장에 버스가 없어요'); sfx.honk(); return; }
+  mode = 'fill'; sfx.board(1); drawItems(); drawBays();
+};
+// pull this bus's color from anywhere in the line until it is full, then it departs
+function fillBay(i){
+  const s = bays[i];
+  if(mode!=='fill' || !s || s.leaving || over) return;
+  mode = null; items.fill--; used++;
+  let need = s.v.cap - s.n;
+  for(let k=0; k<queue.length && need>0; ){ if(queue[k]===s.v.color){ queue.splice(k,1); s.n++; need--; } else k++; }
+  s.leaving = true; sfx.board(6); buzz(20);
+  setTimeout(()=>{ sfx.depart(); toast('꽉 채워 출발!'); }, 120);
+  setTimeout(()=>{ bays[bays.indexOf(s)] = null; drawBays(); drawItems(); checkEnd(); kick(); }, 650);
+  drawQueue(); drawBays({bump:i}); drawStat(); drawItems();
+}
 $('it-slot').onclick = ()=>{
   if(over || items.slot <= 0) return;
   items.slot--; used++;
@@ -504,9 +548,10 @@ function drawBays(flags={}){
   const almost = bays.filter(Boolean).length >= bays.length-1;
   bays.forEach((s,i)=>{
     const d = document.createElement('div');
-    d.className = 'bay' + (s&&s.leaving?' leaving':'') + (flags.arrive===i?' arrive':'') + (flags.bump===i?' bump':'') + (!s&&almost&&!over?' warn':'');
+    d.className = 'bay' + (s?' full':'') + (s&&s.leaving?' leaving':'') + (flags.arrive===i?' arrive':'') + (flags.bump===i?' bump':'') + (!s&&almost&&!over?' warn':'');
     if(s){
       d.innerHTML = `<div class="mini">${vehicleSVG(s.v.color, s.v.len, false, -1)}</div><span class="cnt">${s.n}/${s.v.cap}</span>`;
+      if(mode==='fill' && !s.leaving){ d.onclick = ()=>fillBay(i); d.setAttribute('role','button'); d.setAttribute('aria-label', `${i+1}번 버스 채우기`); }
     } else d.innerHTML = `<span class="num">${i+1}</span>`;
     w.appendChild(d);
   });
@@ -550,7 +595,7 @@ function tap(v, el){
   setTimeout(()=>{
     v.gone = true; el.remove();
     bays[free] = {v, n:0, leaving:false};
-    busy = false; drawBays({arrive:free}); drawStat();
+    busy = false; drawBays({arrive:free}); drawStat(); drawItems();
     setTimeout(kick, 300);
   }, 430);
 }
@@ -567,7 +612,7 @@ function step(){
       if(s.n===s.v.cap){
         s.leaving = true;
         setTimeout(()=>{ sfx.depart(); toast('출발!'); }, 120);
-        setTimeout(()=>{ bays[bays.indexOf(s)] = null; drawBays(); checkEnd(); kick(); }, 650);
+        setTimeout(()=>{ bays[bays.indexOf(s)] = null; drawBays(); drawItems(); checkEnd(); kick(); }, 650);
       }
       drawQueue(); drawBays({bump:i}); drawStat(); drawItems(); kick(); return;
     }
@@ -579,8 +624,8 @@ function checkEnd(){
   if(!queue.length && bays.every(s=>!s)){ finish(true); return; }
   if(bays.some(s=>s&&s.leaving)) return;
   if(queue.length && bays.every(s=>s) && !bays.some(s=>s.v.color===queue[0])){
-    // tow needs a free bay, so only swap and slot can rescue a full stop
-    const canSave = items.slot > 0 || (items.swap > 0 && queue.length > 1);
+    // tow needs a free bay, so only fill (frees a bay) and slot can rescue a full stop
+    const canSave = items.slot > 0 || items.fill > 0;
     if(canSave){
       if(!stuckWarned){ stuckWarned = true; toast('막혔어요! 아이템!'); sfx.honk(); }
       const it=$('items'); it.classList.remove('nudge'); void it.offsetWidth; it.classList.add('nudge');
@@ -658,8 +703,8 @@ function drawPicker(){
   $('tab-easy').classList.toggle('on', pickDiff==='easy'); $('tab-hard').classList.toggle('on', pickDiff==='hard');
   $('tab-easy').setAttribute('aria-selected', pickDiff==='easy'); $('tab-hard').setAttribute('aria-selected', pickDiff==='hard');
   $('modeNote').textContent = pickDiff==='hard'
-    ? '판이 크고 차가 더 촘촘해요. 정류장 4칸을 빈틈없이 써야 하고, 아이템은 견인차 1 · 줄 바꾸기 1뿐이에요.'
-    : '처음이라면 여기부터. 아이템: 견인차 1 · 줄 바꾸기 2 · 자리 추가 1';
+    ? '판이 크고 차가 더 촘촘해요. 정류장 4칸을 빈틈없이 써야 하고, 아이템은 견인차 1 · 섞기 1 · 채우기 1뿐이에요.'
+    : '처음이라면 여기부터. 아이템: 견인차 1 · 섞기 2 · 채우기 1 · 자리 추가 1';
   const pr = progress[pickDiff], g = $('levelGrid'); g.innerHTML = '';
   for(let k=1;k<=LEVEL_COUNT;k++){
     const b = document.createElement('button'); const st = pr.stars[k]||0;

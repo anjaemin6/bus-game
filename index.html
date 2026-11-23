@@ -632,9 +632,10 @@ function removalOrder(vs){
  2) 바깥쪽부터 빠질 수 있는 차를 하나씩 빼면서 그 차의 방향을 정한다.
  뺀 순서를 거꾸로 하면 '배치 순서'가 되므로 나머지 코드(손님 줄, 검사)는 그대로 쓴다. */
 // 원작 스크린샷처럼 뒤로 갈수록 12×12에 차 55~60대까지
+// 원작 스크린샷(레벨 39·40)은 차 55~60대: 앞 단계부터 크게 시작해서 빨리 12×12로
 function denseSize(k, hard){
-  if(hard) return { n: k<=3 ? 8 : k<=8 ? 9 : k<=14 ? 10 : k<=20 ? 11 : 12, fill: Math.min(.96, .88 + k*.003) };
-  return { n: k<=3 ? 7 : k<=7 ? 8 : k<=12 ? 9 : k<=18 ? 10 : k<=24 ? 11 : 12, fill: Math.min(.95, .82 + k*.005) };
+  if(hard) return { n: k<=2 ? 9 : k<=5 ? 10 : k<=9 ? 11 : 12, fill: Math.min(.96, .91 + k*.002) };
+  return { n: k<=2 ? 8 : k<=5 ? 9 : k<=9 ? 10 : k<=14 ? 11 : 12, fill: Math.min(.96, .88 + k*.003) };
 }
 function packBoard(N, fill, R, wantLen){
   const grid = Array.from({length:N}, () => Array(N).fill(-1));
@@ -742,10 +743,11 @@ function makeLevel(k, mode = 'easy'){
   const F = features(k, hard), P0 = levelParams(k, hard);
   // 대각선 차는 3단계마다 한 번씩 예전 방식 판에서 나오고, 나머지는 꽉 찬 판
   const dense = !(F.diag > 0 && k % 3 === 0);
-  const DS = denseSize(k, hard), N = dense ? DS.n : P0.n;
+  const DS = denseSize(k, hard), N = dense ? DS.n : Math.min(11, DS.n);   // 대각선 판도 크게(최대 11×11)
   // diagonal cars also use the corner cells they cut across, so boards with them hold fewer cars
-  const base = F.diag > 0 ? {...P0, count: Math.round(P0.count * (1 - F.diag*.7))} : P0;
-  const tries = dense ? [[1, 300]] : [[1.3, 40], [1.15, 80], [1, 400]];
+  const P0n = dense ? P0 : {...P0, count: Math.round(N*N*.27)};
+  const base = F.diag > 0 ? {...P0n, count: Math.round(P0n.count * (1 - F.diag*.7))} : P0n;
+  const tries = dense ? [[1, 300]] : [[1.1, 25], [1, 60], [.85, 300]];
   let fallback = null;   // 아슬아슬한 판을 못 찾으면 처음 만든 깰 수 있는 판
   const started = Date.now();
   for(const [more, limit] of tries){
@@ -757,7 +759,7 @@ function makeLevel(k, mode = 'easy'){
     const vs = [];
     const big = k <= 10 ? BIG[hard ? 'hard' : 'easy'][k] : (hard ? .28 : .18);
     if(dense){
-      const pk = packBoard(N, DS.fill, R, () => { const roll = R(); return roll < big ? 4 : roll < big + P.bus ? 3 : 2; });
+      const pk = packBoard(N, DS.fill, R, () => { const roll = R(); return roll < big*.4 ? 4 : roll < big*.4 + P.bus*.6 ? 3 : 2; });
       const order = peelBoard(pk.vs, N, R);
       if(!order) continue;
       vs.push(...order.reverse()); grid = pk.grid;

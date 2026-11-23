@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="출발 정류장">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}</style>
@@ -16,7 +16,7 @@
 :root{
   --bg:#dfe9f2; --fg:#1d2430; --muted:#5a6577; --panel:#ffffff; --line:#c9d3df;
   --asphalt:#3b4250; --asphalt2:#353b48; --stall:#e9edf2; --curb:#f2c94c; --walk:#cfd6de; --walk2:#c3cbd5;
-  --c-R:#e5484d; --c-B:#2f7fe8; --c-Y:#f0a800; --c-G:#1fa36a; --c-P:#8b5cf6; --c-K:#ec4f9c; --c-X:#2a2e36; --c-W:#f3f5f8; --c-N:#8a5a33;
+  --c-R:#e02424; --c-B:#1c6ff2; --c-Y:#ffcc00; --c-G:#1db954; --c-P:#7b3fe4; --c-K:#ff7ac6; --c-X:#2a2e36; --c-W:#f3f5f8; --c-N:#8a5a33;
   --accent:#ff7a1a; --skin:#f3c9a0;
   --display:"Jua","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
   --body:"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
@@ -31,17 +31,25 @@ html,body{height:100%}
 [hidden]{display:none!important}
 body{background:var(--bg);color:var(--fg);font-family:var(--body);
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
-  padding-block:10px 18px;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
-.wrap{max-width:440px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+  padding-block:8px 10px;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+html,body{box-sizing:border-box}
+*{touch-action:manipulation}
+body{overflow:hidden}
+.wrap{max-width:520px;height:100%;margin:0 auto;display:flex;flex-direction:column;gap:6px}
+.boardwrap{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center}
+.btn .dot{display:inline-grid;place-items:center;min-width:20px;height:20px;border-radius:99px;background:#e5484d;color:#fff;font-size:12px;padding:0 5px;margin-left:4px;vertical-align:1px}
 .wrap.quake{animation:quake .45s}
 @keyframes quake{20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(4px)}}
 
 header{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .lv{display:flex;flex-direction:column}
 h1{font-family:var(--display);font-weight:400;font-size:26px;margin:0;line-height:1.1}
-.sub{font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
+.sub{font-size:15px;color:var(--fg);font-family:var(--display);font-variant-numeric:tabular-nums;white-space:nowrap;display:flex;align-items:center;gap:2px}
 .tools{display:flex;gap:6px;flex:0 0 auto}
-.tools .btn{font-size:15px;padding:8px 10px;white-space:nowrap}
+.tools .btn{font-size:14px;padding:7px 8px;white-space:nowrap}
+.tools{gap:4px}
+header{flex-wrap:nowrap;min-width:0}
+.lv{min-width:0}
 button{font:inherit;cursor:pointer}
 .btn{font-family:var(--display);font-size:16px;padding:8px 12px;border-radius:12px;border:2px solid var(--line);
   background:var(--panel);color:var(--fg);box-shadow:0 3px 0 var(--line)}
@@ -49,7 +57,7 @@ button{font:inherit;cursor:pointer}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 4px 0 #c75a0c;font-size:20px;padding:12px 18px}
 .btn:focus-visible,.veh:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 
-.progress{height:10px;border-radius:99px;background:var(--panel);border:2px solid var(--line);overflow:hidden}
+.progress{height:8px;border-radius:99px;background:var(--panel);border:2px solid var(--line);overflow:hidden}
 .progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--c-G),#7bd88f);transition:width .25s}
 
 /* sidewalk + passengers */
@@ -58,8 +66,8 @@ button{font:inherit;cursor:pointer}
   display:flex;align-items:flex-end;gap:2px;padding:6px 8px 4px;overflow:hidden}
 .sign{position:absolute;left:6px;bottom:8px;font-family:var(--display);font-size:13px;color:#fff;background:#2f7fe8;
   padding:2px 8px;border-radius:6px;z-index:2}
-.line{display:flex;flex-wrap:wrap-reverse;align-items:flex-end;align-content:flex-start;gap:0;margin-left:46px;flex:1;min-width:0;max-height:108px;overflow:hidden}
-.pax{flex:0 0 auto;width:13px;height:21px;margin-right:-1px;margin-top:-4px;transition:transform .2s}
+.line{display:flex;flex-wrap:wrap-reverse;align-items:flex-end;align-content:flex-start;gap:0;margin-left:46px;flex:1;min-width:0;max-height:clamp(64px,15vh,150px);overflow:hidden}
+.pax{flex:0 0 auto;width:clamp(15px,2.9vh,28px);height:clamp(23px,4.5vh,43px);margin-right:-2px;margin-top:-5px;transition:transform .2s}
 .run{display:inline-flex;align-items:flex-end;gap:0;padding:2px 4px 2px 2px;border-radius:10px;
   background:color-mix(in srgb, var(--rc) 22%, transparent);border:2px solid color-mix(in srgb, var(--rc) 55%, transparent)}
 .run .pax{width:15px;height:24px;margin-right:-3px}
@@ -67,7 +75,7 @@ button{font:inherit;cursor:pointer}
 .run.first{border-width:3px;border-color:var(--rc)}
 .run.first .pax{width:19px;height:30px}
 .pax svg{width:100%;height:100%;display:block}
-.pax.first{width:19px;height:30px;animation:bob .6s ease-in-out infinite alternate}
+.pax.first{width:clamp(20px,3.8vh,36px);height:clamp(31px,5.9vh,56px);animation:bob .6s ease-in-out infinite alternate}
 .pax.walkin{animation:walkin .3s ease-out}
 @keyframes bob{to{transform:translateY(-3px)}}
 @keyframes walkin{from{transform:translateX(30px);opacity:.3}}
@@ -75,7 +83,7 @@ button{font:inherit;cursor:pointer}
 .curb{height:8px;background:repeating-linear-gradient(90deg,var(--curb) 0 20px,#fff 20px 40px)}
 
 .bays{display:grid;gap:5px;background:var(--asphalt);padding:6px}
-.bay{position:relative;min-width:0;aspect-ratio:1/1.75;border:2px dashed rgba(255,255,255,.45);border-top:0;border-radius:0 0 10px 10px;
+.bay{position:relative;min-width:0;aspect-ratio:1/1.45;border:2px dashed rgba(255,255,255,.45);border-top:0;border-radius:0 0 10px 10px;
   display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:4px 0 6px;gap:4px}
 .bay.vip{border-color:#f5b700;border-style:solid;background:rgba(245,183,0,.12)}
 .viptag{font-family:var(--display);font-size:15px;color:#f5b700;writing-mode:vertical-rl;margin:auto}
@@ -99,7 +107,7 @@ button{font:inherit;cursor:pointer}
 .bay.warn{border-color:#ff6b6b}
 
 /* parking lot */
-.board{position:relative;aspect-ratio:1;width:100%;max-width:100%;border-radius:18px;overflow:hidden;
+.board{position:relative;aspect-ratio:1;width:100%;max-width:100%;flex:0 0 auto;border-radius:18px;overflow:hidden;
   background:var(--asphalt);box-shadow:inset 0 0 0 6px var(--asphalt2),0 5px 0 rgba(0,0,0,.12)}
 .board::before{content:"";position:absolute;inset:0;
   background:radial-gradient(circle at 20% 15%,rgba(255,255,255,.06),transparent 45%),radial-gradient(circle at 80% 85%,rgba(0,0,0,.18),transparent 50%);}
@@ -147,11 +155,11 @@ button{font:inherit;cursor:pointer}
   text-shadow:0 3px 0 rgba(0,0,0,.4);pointer-events:none;z-index:5;white-space:nowrap;animation:toast 1s forwards}
 @keyframes toast{0%{opacity:0;transform:translate(-50%,-30%) scale(.7)}20%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-90%)}}
 
-.items{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.item{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 4px;border-radius:14px;
+.items{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.item{position:relative;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:4px;padding:8px 4px;min-height:44px;border-radius:12px;
   border:2px solid var(--line);background:var(--panel);color:var(--fg);font-family:var(--display);font-size:15px;white-space:nowrap;box-shadow:0 4px 0 var(--line)}
 .item:active{transform:translateY(2px);box-shadow:0 2px 0 var(--line)}
-.item svg{width:26px;height:26px;flex:0 0 auto}
+.item svg{width:22px;height:22px;flex:0 0 auto}
 .questbtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;font-family:var(--display);font-size:17px;padding:9px 12px;
   border-radius:14px;border:2px solid #f5b700;background:linear-gradient(180deg,#fff6d6,#ffe9a3);color:#5a3a00;box-shadow:0 3px 0 #d9a200;position:relative}
 .questbtn:active{transform:translateY(2px);box-shadow:0 1px 0 #d9a200}
@@ -175,10 +183,12 @@ button{font:inherit;cursor:pointer}
 .coins{display:inline-flex;align-items:center;gap:4px;font-family:var(--display);font-size:16px;font-variant-numeric:tabular-nums;
   background:var(--panel);border:2px solid var(--line);border-radius:99px;padding:2px 10px 2px 4px;margin-left:6px;vertical-align:1px}
 .coin{width:20px;height:20px;flex:0 0 auto}
+.shopcoins{position:absolute;top:-10px;right:-6px;margin:0;padding:1px 7px 1px 2px;font-size:13px;gap:2px}
+.shopcoins .coin{width:15px;height:15px}
 .coins.bump{animation:bump .3s 2}
 .item .badge.buy{background:#f5b700;color:#5a3a00;gap:2px;display:flex;align-items:center}
 .item .badge.buy .coin{width:14px;height:14px}
-.item .badge{position:absolute;top:-8px;right:-6px;min-width:24px;height:24px;border-radius:99px;background:var(--accent);color:#fff;
+.item .badge{position:absolute;top:-9px;right:-4px;min-width:20px;height:20px;font-size:12px !important;border-radius:99px;background:var(--accent);color:#fff;
   font-size:14px;display:grid;place-items:center;padding:0 6px;font-variant-numeric:tabular-nums}
 .item:disabled{opacity:.45;cursor:default}
 .item:disabled .badge{background:var(--muted)}
@@ -191,7 +201,7 @@ button{font:inherit;cursor:pointer}
 @keyframes spin{50%{transform:scale(.6) rotate(180deg)}}
 .board.towing{box-shadow:inset 0 0 0 6px var(--accent),0 5px 0 rgba(0,0,0,.12)}
 .veh.lift{transform:scale(1.25)!important;opacity:0;transition:transform .45s ease-in,opacity .45s ease-in}
-.hint{font-family:var(--display);font-size:16px;color:var(--accent);text-align:center;margin:0;min-height:1.4em}
+.hint{position:absolute;left:0;right:0;top:6px;z-index:6;pointer-events:none;font-family:var(--display);font-size:16px;color:#fff;text-align:center;margin:0;text-shadow:0 2px 0 rgba(0,0,0,.5)}
 .help{font-size:14px;color:var(--muted);line-height:1.55;margin:0}
 .help b{color:var(--fg)}
 
@@ -230,23 +240,26 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
 </div>
 <div class="wrap" id="wrap">
   <header>
-    <div class="lv">
-      <h1>출발 정류장</h1>
-      <span class="sub"><span id="stat">1단계</span><span class="coins" id="coins" aria-label="동전"><svg class="coin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="#f5b700"/><circle cx="10" cy="10" r="6.5" fill="none" stroke="#c98a00" stroke-width="1.6"/><text x="10" y="13.5" font-size="9" text-anchor="middle" fill="#8a5a00" font-family="sans-serif" font-weight="700">W</text></svg><b id="coinN">0</b></span></span>
-    </div>
+    <div class="lv"><span class="sub"><span id="stat">1단계</span></span></div>
     <div class="tools">
+      <button class="btn" id="questBtn">선물<small id="questSum" hidden></small><span class="dot" id="questDot" hidden>0</span></button>
       <button class="btn" id="levelsBtn">단계</button>
-      <button class="btn" id="sound">소리 켬</button>
+      <button class="btn" id="sound">소리</button>
       <button class="btn" id="restart">다시</button>
+      <button class="btn" id="helpBtn" aria-label="놀이 방법">?</button>
     </div>
   </header>
   <div class="progress" aria-hidden="true"><i id="bar"></i></div>
-  <button class="questbtn" id="questBtn">선물 · 퀘스트 <small id="questSum"></small><span class="dot" id="questDot" hidden>0</span></button>
 
   <div class="street">
     <div class="walk"><span class="sign">정류장</span><div class="line" id="queue"></div></div>
     <div class="curb"></div>
     <div class="bays" id="bays"></div>
+  </div>
+
+  <div class="boardwrap" id="boardwrap">
+    <div class="board" id="board" aria-label="주차장"></div>
+    <p class="hint" id="hint"></p>
   </div>
 
   <div class="items" id="items">
@@ -264,16 +277,9 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
     <button class="item" id="it-shop" aria-label="상점: 아이템 사기">
       <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 12 l3 -7 h18 l3 7z" fill="#e5484d"/><path d="M4 12 h24 v3 a4 4 0 0 1 -6 0 a4 4 0 0 1 -6 0 a4 4 0 0 1 -6 0 a4 4 0 0 1 -6 0z" fill="#fff" stroke="#e5484d" stroke-width="1.5"/>
         <rect x="6" y="16" width="20" height="12" rx="2" fill="#2f7fe8"/><rect x="10" y="19" width="6" height="9" fill="#bfe3ff"/></svg>
-      상점</button>
+      상점<span class="coins shopcoins" id="coins" aria-label="동전"><svg class="coin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="#f5b700"/><circle cx="10" cy="10" r="6.5" fill="none" stroke="#c98a00" stroke-width="1.6"/><text x="10" y="13.5" font-size="9" text-anchor="middle" fill="#8a5a00" font-family="sans-serif" font-weight="700">W</text></svg><b id="coinN">0</b></span></button>
   </div>
   <button id="it-slot" hidden></button><span id="n-slot" hidden></span>
-  <p class="hint" id="hint"></p>
-
-  <div class="board" id="board" aria-label="주차장"></div>
-
-  <p class="help"><b>차를 누르면</b> 머리 쪽으로 빠져나가 정류장에 섭니다. 앞이 막힌 차는 못 나가요.
-    맨 앞 손님부터 <b>같은 색 차</b>에 타고, 자리가 차면 출발해요. 정류장이 꽉 막히면 집니다.
-    손님이 <b>다 탈 때까지 기다렸다가</b> 다음 차를 빼면 실수가 줄어요. 막히면 <b>아이템</b>을 써 보세요. 아이템은 다음 판에도 남고, 다 쓰면 판을 깨서 모은 <b>동전</b>으로 살 수 있어요. 아이템을 안 쓰고 깨면 별과 동전을 더 받아요.</p>
 </div>
 
 <div class="overlay" id="overlay" hidden>
@@ -297,7 +303,17 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
     </div>
     <p id="modeNote"></p>
     <div class="levels" id="levelGrid"></div>
+
     <button class="btn" id="pickClose">닫기</button>
+  </div>
+</div>
+<div class="overlay" id="helpbox" hidden>
+  <div class="card">
+    <h2>놀이 방법</h2>
+    <p class="help" style="text-align:left"><b>차를 누르면</b> 머리 쪽으로 빠져나가 정류장에 섭니다. 앞이 막힌 차는 못 나가요.
+    맨 앞 손님부터 <b>같은 색 차</b>에 타고, 자리가 차면 출발해요. 정류장이 꽉 막히면 집니다.
+    손님이 <b>다 탈 때까지 기다렸다가</b> 다음 차를 빼면 실수가 줄어요. 막히면 <b>아이템</b>을 써 보세요. 아이템은 다음 판에도 남고, 다 쓰면 판을 깨서 모은 <b>동전</b>으로 살 수 있어요. 아이템을 안 쓰고 깨면 별과 동전을 더 받아요.</p>
+    <button class="btn primary" id="helpClose">알겠어요</button>
   </div>
 </div>
 <div class="overlay" id="loading" hidden>
@@ -867,17 +883,17 @@ function vehicleSVG(color, len, h, dir, cap, stretch, noBadge){
     const wins = [];
     for(let x=40; x<L-90; x+=38){ wins.push(`<rect x="${x}" y="17" width="30" height="12" rx="3" fill="#bfe3ff" opacity=".9"/><rect x="${x}" y="71" width="30" height="12" rx="3" fill="#bfe3ff" opacity=".9"/>`); }
     top = `
-      <rect x="4" y="12" width="${L-8}" height="76" rx="16" fill="${C(color)}"/>
+      <rect x="4" y="12" width="${L-8}" height="76" rx="16" fill="${C(color)}" stroke="#14171c" stroke-opacity=".75" stroke-width="5"/>
       <rect x="4" y="12" width="${L-8}" height="76" rx="16" fill="url(#shade)"/>
       ${wins.join('')}
-      <rect x="34" y="34" width="${L-120}" height="32" rx="8" fill="#fff" opacity=".22"/>
+      <rect x="34" y="34" width="${L-120}" height="32" rx="8" fill="#fff" opacity=".12"/>
       ${cap === 24 && color !== 'W' ? `<rect x="8" y="44" width="${L-16}" height="12" fill="#000" opacity=".16"/><rect x="${L/2-70}" y="30" width="60" height="40" rx="8" fill="#e9edf2" opacity=".85"/><rect x="${L/2-62}" y="38" width="44" height="24" rx="4" fill="#9aa4b4" opacity=".7"/>` : ''}
       <path d="M${L-52} 16 h24 q20 0 20 20 v28 q0 20 -20 20 h-24 z" fill="#1c3a52"/>
       <path d="M${L-50} 20 h20 q14 0 14 16 v8 z" fill="#fff" opacity=".25"/>`;
   } else if(cap === 8){
     const side = [64, 96, 128].map(x => `<rect x="${x}" y="15" width="26" height="9" rx="3" fill="#bfe3ff" opacity=".9"/><rect x="${x}" y="76" width="26" height="9" rx="3" fill="#bfe3ff" opacity=".9"/>`).join('');
     top = `
-      <rect x="6" y="12" width="${L-12}" height="76" rx="12" fill="${C(color)}"/>
+      <rect x="6" y="12" width="${L-12}" height="76" rx="12" fill="${C(color)}" stroke="#14171c" stroke-opacity=".75" stroke-width="5"/>
       <rect x="6" y="12" width="${L-12}" height="76" rx="12" fill="url(#shade)"/>
       <path d="M36 22 h20 v56 h-20 q-8 0 -8 -8 v-40 q0 -8 8 -8z" fill="#1c3a52"/>
       <rect x="56" y="24" width="112" height="52" rx="7" fill="#fff" opacity=".16"/>
@@ -885,7 +901,7 @@ function vehicleSVG(color, len, h, dir, cap, stretch, noBadge){
       <path d="M168 20 h10 q14 0 14 14 v32 q0 14 -14 14 h-10 z" fill="#1c3a52"/>`;
   } else {
     top = `
-      <rect x="6" y="12" width="${L-12}" height="76" rx="22" fill="${C(color)}"/>
+      <rect x="6" y="12" width="${L-12}" height="76" rx="22" fill="${C(color)}" stroke="#14171c" stroke-opacity=".75" stroke-width="5"/>
       <rect x="6" y="12" width="${L-12}" height="76" rx="22" fill="url(#shade)"/>
       <path d="M48 22 h24 v56 h-24 q-10 0 -10 -10 v-36 q0 -10 10 -10z" fill="#1c3a52"/>
       <rect x="72" y="20" width="62" height="60" rx="10" fill="${C(color)}"/>
@@ -1026,6 +1042,8 @@ function openStore(){
   }
   $('store').hidden = false; $('stClose').focus();
 }
+$('helpBtn').onclick = ()=>{ $('helpbox').hidden = false; $('helpClose').focus(); };
+$('helpClose').onclick = ()=>{ $('helpbox').hidden = true; };
 $('it-shop').onclick = ()=>{ if(!over) openStore(); };
 $('stClose').onclick = ()=>{ $('store').hidden = true; };
 $('shNo').onclick = ()=>{ $('shop').hidden = true; buyFor = null; };
@@ -1111,7 +1129,14 @@ function diagBox(v){
   return {mx, my, Lc, Wc, ang: Math.atan2(v.dy, v.dx)*180/Math.PI, fx, fy};
 }
 
+// 주차장은 남는 공간에 꽉 맞는 정사각형으로
+function fitBoard(){
+  const bw = $('boardwrap'), b = $('board');
+  const sz = Math.max(140, Math.floor(Math.min(bw.clientWidth, bw.clientHeight)));
+  b.style.width = b.style.height = sz + 'px';
+}
 function drawBoard(flash){
+  fitBoard();
   const b = $('board'); b.querySelectorAll('.veh,.tunnel').forEach(e=>e.remove());
   for(const t of tunnels){
     const left = vehicles.filter(w => w.tunnel === t.id && w.waiting).length;
@@ -1210,7 +1235,8 @@ function drawBays(flags={}){
 }
 function drawStat(){
   const total = current.queue.length, done = total - queue.length;
-  $('stat').innerHTML = `<span class="diff${diff==='hard'?' hard':''}">${diff==='hard'?'어려움':'보통'}</span> ${levelNo}단계 · 손님 ${done}/${total}`;
+  $('stat').innerHTML = `<span class="diff${diff==='hard'?' hard':''}">${diff==='hard'?'어려움':'보통'}</span> ${levelNo}단계`;
+  $('stat').title = `손님 ${done}/${total}`;
   $('bar').style.width = done/total*100 + '%';
 }
 function toast(text){
@@ -1425,7 +1451,7 @@ function confetti(){
 }
 function stopFx(){ cancelAnimationFrame(fxRaf); const cv=$('fx'); cv.getContext('2d').clearRect(0,0,cv.width,cv.height); }
 
-function syncSound(){ $('sound').textContent = soundOn ? '소리 켬' : '소리 끔'; }
+function syncSound(){ $('sound').textContent = soundOn ? '소리' : '무음'; }
 $('sound').onclick = ()=>{ soundOn = !soundOn; syncSound(); try{ localStorage.setItem('bus-sound', soundOn?'on':'off'); }catch(e){} if(soundOn) sfx.board(3); };
 $('restart').onclick = init;
 $('ovBtn').onclick = ()=>{

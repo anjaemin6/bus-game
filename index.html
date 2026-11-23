@@ -16,7 +16,7 @@
 :root{
   --bg:#dfe9f2; --fg:#1d2430; --muted:#5a6577; --panel:#ffffff; --line:#c9d3df;
   --asphalt:#3b4250; --asphalt2:#353b48; --stall:#e9edf2; --curb:#f2c94c; --walk:#cfd6de; --walk2:#c3cbd5;
-  --c-R:#e5484d; --c-B:#2f7fe8; --c-Y:#f0a800; --c-G:#1fa36a; --c-P:#8b5cf6; --c-K:#ec4f9c; --c-X:#2a2e36;
+  --c-R:#e5484d; --c-B:#2f7fe8; --c-Y:#f0a800; --c-G:#1fa36a; --c-P:#8b5cf6; --c-K:#ec4f9c; --c-X:#2a2e36; --c-W:#f3f5f8;
   --accent:#ff7a1a; --skin:#f3c9a0;
   --display:"Jua","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
   --body:"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
@@ -68,8 +68,8 @@ button{font:inherit;cursor:pointer}
 .more{font-family:var(--display);font-size:14px;color:var(--muted);margin-left:auto;padding:0 4px 10px;white-space:nowrap}
 .curb{height:8px;background:repeating-linear-gradient(90deg,var(--curb) 0 20px,#fff 20px 40px)}
 
-.bays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;background:var(--asphalt);padding:6px}
-.bay{position:relative;min-width:0;aspect-ratio:1/1.5;border:2px dashed rgba(255,255,255,.45);border-top:0;border-radius:0 0 10px 10px;
+.bays{display:grid;gap:5px;background:var(--asphalt);padding:6px}
+.bay{position:relative;min-width:0;aspect-ratio:1/1.75;border:2px dashed rgba(255,255,255,.45);border-top:0;border-radius:0 0 10px 10px;
   display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:4px 0 6px;gap:4px}
 .bay.locked{border:2px solid rgba(255,255,255,.12);border-top:0;background:rgba(0,0,0,.28);justify-content:center;cursor:pointer;gap:2px}
 .bay.locked svg{width:44%;height:auto;opacity:.55}
@@ -78,7 +78,7 @@ button{font:inherit;cursor:pointer}
 .bay.opened{animation:opened .5s}
 @keyframes opened{0%{background:rgba(255,194,26,.6)}}
 .bay .num{position:absolute;bottom:4px;left:0;right:0;text-align:center;font-family:var(--display);font-size:18px;color:rgba(255,255,255,.35)}
-.bay .mini{width:62%;flex:1;min-height:0;display:flex;justify-content:center}
+.bay .mini{width:78%;flex:1;min-height:0;display:flex;justify-content:center}
 .bay .mini svg{height:100%;width:auto;max-width:100%;filter:drop-shadow(0 3px 2px rgba(0,0,0,.35))}
 .bay.arrive .mini{animation:arrive .45s cubic-bezier(.2,.8,.3,1.1)}
 .bay.leaving .mini{transform:translateY(-140%);opacity:0;transition:transform .5s ease-in,opacity .5s ease-in}
@@ -285,8 +285,8 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
 <script>
 let N = 6; const START_BAYS = 4, MAX_BAYS = 7;
 let items, mode = null, used = 0, rescued = false;
-const SYM = {R:'●', B:'■', Y:'▲', G:'◆', P:'★', K:'♥', X:'?'};
-const NAME = {R:'빨강', B:'파랑', Y:'노랑', G:'초록', P:'보라', K:'분홍', X:'물음표'};
+const SYM = {R:'●', B:'■', Y:'▲', G:'◆', P:'★', K:'♥', X:'?', W:'✚'};
+const NAME = {R:'빨강', B:'파랑', Y:'노랑', G:'초록', P:'보라', K:'분홍', X:'물음표', W:'구급차'};
 let diff = 'easy', levelNo = 1, current;
 let progress = {easy:{unlocked:1, stars:{}}, hard:{unlocked:1, stars:{}}, coins:100, items:{tow:2, shuffle:2, fill:2, slot:2}};
 try{ const p = JSON.parse(localStorage.getItem('bus-progress')||'null'); if(p && p.easy && p.hard) progress = p;
@@ -422,9 +422,10 @@ function solvesCleanly(L){
 //  cover (garage): opens after that many vehicles have left the lot
 //  tunnel: a queue of cars that pull out one by one into the same spot
 //  diag: share of cars parked at 45 degrees
+//  amb: white ambulances (24 seats) that only pick up patients in white
 function features(k, hard){
-  if(hard) return { diag: k>=15 ? .35 : k>=4 ? .25 : 0, mystery: k>=15 ? .3 : .25, covers: k>=15 ? 3 : k>=6 ? 2 : k>=3 ? 1 : 0, tunnels: k>=18 ? 3 : k>=8 ? 2 : k>=5 ? 1 : 0 };
-  return { diag: k>=20 ? .3 : k>=12 ? .2 : 0, mystery: k>=20 ? .25 : k>=4 ? .2 : 0, covers: k>=20 ? 3 : k>=9 ? 2 : k>=7 ? 1 : 0, tunnels: k>=22 ? 3 : k>=15 ? 2 : k>=9 ? 1 : 0 };
+  if(hard) return { amb: k>=18 ? 2 : k>=6 ? 1 : 0, diag: k>=15 ? .35 : k>=4 ? .25 : 0, mystery: k>=15 ? .3 : .25, covers: k>=15 ? 3 : k>=6 ? 2 : k>=3 ? 1 : 0, tunnels: k>=18 ? 3 : k>=8 ? 2 : k>=5 ? 1 : 0 };
+  return { amb: k>=24 ? 2 : k>=14 ? 1 : 0, diag: k>=20 ? .3 : k>=12 ? .2 : 0, mystery: k>=20 ? .25 : k>=4 ? .2 : 0, covers: k>=20 ? 3 : k>=9 ? 2 : k>=7 ? 1 : 0, tunnels: k>=22 ? 3 : k>=15 ? 2 : k>=9 ? 1 : 0 };
 }
 // clean solution: reverse placement order, each tunnel's cars right after the car parked in front of it
 function removalOrder(vs){
@@ -491,7 +492,14 @@ function makeLevel(k, mode = 'easy'){
     const vehicles = vs.map((v,i) => ({id:'v'+i, color:colors[i], c:v.c, r:v.r, len:v.len, cap:pickCap(v.len, R, k, hard),
       ...(v.diag ? {diag:true, dx:v.dx, dy:v.dy} : {h:v.h, dir:v.dir})}));
     const order = vehicles.slice().reverse();
-    order.forEach((v,i) => { if(i >= 1 && R() < F.mystery) v.mystery = true; });
+    if(F.amb){
+      const mid = order.filter(v => v.len === 3);
+      for(let a = 0; a < F.amb && mid.length; a++){
+        const v = mid.splice(Math.floor(R()*mid.length), 1)[0];
+        v.color = 'W'; v.cap = 24; v.amb = true;
+      }
+    }
+    order.forEach((v,i) => { if(i >= 1 && !v.amb && R() < F.mystery) v.mystery = true; });
     const spots = order.map((v,i) => [v,i]).filter(([v,i]) => i >= 2 && !v.mystery && !v.diag);
     for(let c = 0; c < F.covers && spots.length; c++){
       const [v,i] = spots.splice(Math.floor(R()*spots.length), 1)[0];
@@ -565,21 +573,27 @@ function vehicleSVG(color, len, h, dir, cap, stretch){
   const lights = `<rect x="${L-14}" y="18" width="8" height="16" rx="3" fill="#fff6c2"/><rect x="${L-14}" y="66" width="8" height="16" rx="3" fill="#fff6c2"/>
     <rect x="6" y="20" width="6" height="12" rx="2" fill="#ff5a5a"/><rect x="6" y="68" width="6" height="12" rx="2" fill="#ff5a5a"/>`;
   const ax = bus ? L-96 : 166;
-  const arrow = `<path d="M${ax} 38 l16 12 l-16 12" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/>`;
+  const amb = color === 'W';
+  // ambulance: red stripe, red cross on the roof, blue-red light bar behind the windshield
+  const ambDeco = !amb ? '' : `<rect x="8" y="80" width="${L-16}" height="6" fill="#e5484d"/><rect x="8" y="14" width="${L-16}" height="6" fill="#e5484d"/>
+    <path d="M36 36 h10 v9 h9 v10 h-9 v9 h-10 v-9 h-9 v-10 h9z" fill="#e5484d"/>
+    <rect x="${L-70}" y="22" width="10" height="27" rx="3" fill="#2f7fe8"/><rect x="${L-70}" y="51" width="10" height="27" rx="3" fill="#e5484d"/>`;
+  const arrow = `<path d="M${ax} 38 l16 12 l-16 12" fill="none" stroke="${amb ? '#e5484d' : '#fff'}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/>`;
   // seat count badge, drawn upright whatever way the vehicle faces
   const bx = bus ? L/2-20 : 103, by = 50;
   const [px,py] = !t ? [bx,by] : (h ? [L-bx, W-by] : dir>0 ? [W-by, bx] : [by, L-bx]);
   const badge = `<circle cx="${px}" cy="${py}" r="32" fill="#fff" opacity=".95"/><text x="${px}" y="${py+12}" font-size="${cap>=10?32:38}" font-weight="700" text-anchor="middle" fill="#1d2430" font-family="sans-serif">${cap}</text>`;
   return `<svg viewBox="${vb}"${stretch ? ' preserveAspectRatio="none"' : ''} aria-hidden="true"><defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#fff" stop-opacity=".25"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".22"/></linearGradient></defs>
-    <g transform="${t}">${wheels}${top}${lights}${arrow}</g>${stretch ? '' : badge}</svg>`;
+    <g transform="${t}">${wheels}${top}${ambDeco}${lights}${arrow}</g>${stretch ? '' : badge}</svg>`;
 }
 function personSVG(color){
   return `<svg viewBox="0 0 26 40" aria-hidden="true">
     <ellipse cx="13" cy="38" rx="9" ry="2" fill="#000" opacity=".18"/>
     <rect x="7" y="29" width="5" height="9" rx="2" fill="#2d3340"/><rect x="14" y="29" width="5" height="9" rx="2" fill="#2d3340"/>
     <path d="M4 31 v-9 a9 9 0 0 1 18 0 v9 z" fill="${C(color)}"/>
-    <text x="13" y="29" font-size="8" text-anchor="middle" fill="#fff" font-family="sans-serif">${SYM[color]}</text>
+    ${color === 'W' ? '<path d="M4 31 v-9 a9 9 0 0 1 18 0 v9 z" fill="none" stroke="#c9ced6" stroke-width="1"/>' : ''}
+    <text x="13" y="29" font-size="8" text-anchor="middle" fill="${color === 'W' ? '#e5484d' : '#fff'}" font-family="sans-serif">${SYM[color]}</text>
     <circle cx="13" cy="9" r="7" fill="var(--skin)"/>
     <path d="M6 8 a7 7 0 0 1 14 0 q-7 -4 -14 0z" fill="#3a2a20"/>
     <circle cx="10.5" cy="10" r="1" fill="#222"/><circle cx="15.5" cy="10" r="1" fill="#222"/></svg>`;
@@ -626,7 +640,7 @@ function init(){
 
 /* ---------- items ---------- */
 // cars still in the lot whose color can be shuffled (garages stay shut, hidden cars keep their secret)
-function shufflePool(){ return vehicles.filter(v => !v.gone && !v.cover && !v.waiting); }
+function shufflePool(){ return vehicles.filter(v => !v.gone && !v.cover && !v.waiting && !v.amb); }
 function canShuffle(){
   const pool = shufflePool();
   return [...new Set(pool.map(v=>v.cap))].some(c => new Set(pool.filter(v=>v.cap===c).map(v=>v.color)).size > 1);
@@ -770,7 +784,7 @@ function drawBoard(flash){
       b.appendChild(el); continue;
     }
     const hidden = v.mystery && !v.revealed;
-    el.setAttribute('aria-label', hidden ? `물음표 ${KIND[v.cap]}, ${way}으로 나감` : `${NAME[v.color]} ${KIND[v.cap]}(${v.cap}명), ${way}으로 나감`);
+    el.setAttribute('aria-label', hidden ? `물음표 ${KIND[v.cap]}, ${way}으로 나감` : v.amb ? `구급차(${v.cap}명), ${way}으로 나감` : `${NAME[v.color]} ${KIND[v.cap]}(${v.cap}명), ${way}으로 나감`);
     if(v.diag){
       const px = $('board').clientWidth/N, d = diagBox(v);
       el.innerHTML = vehicleSVG(hidden ? 'X' : v.color, v.len, true, 1, 0, true)
@@ -806,13 +820,15 @@ function drawBays(flags={}){
     } else d.innerHTML = `<span class="num">${i+1}</span>`;
     w.appendChild(d);
   });
-  // locked slots: shown from the start, opened by the 자리 추가 item
-  for(let i = bays.length; i < MAX_BAYS; i++){
+  // locked slots fold into one small button so the open ones get the width
+  const lockedN = MAX_BAYS - bays.length;
+  w.style.gridTemplateColumns = `repeat(${bays.length},minmax(0,1fr))` + (lockedN ? ' minmax(0,.55fr)' : '');
+  if(lockedN){
     const d = document.createElement('button');
     const can = items && items.slot > 0 && !over;
     d.className = 'bay locked' + (over ? ' nope' : '');
-    d.setAttribute('aria-label', can ? `${i+1}번 자리 열기 (자리 추가 아이템 사용)` : `${i+1}번 자리, 잠김 (동전으로 열기)`);
-    d.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2" fill="#fff"/><path d="M8 10 V7 a4 4 0 0 1 8 0 v3" stroke="#fff" stroke-width="2.4" fill="none"/></svg><small>${can ? '열기' : '잠김'}</small>`;
+    d.setAttribute('aria-label', can ? `잠긴 자리 ${lockedN}칸 중 하나 열기 (자리 추가 아이템 사용)` : `잠긴 자리 ${lockedN}칸 (동전으로 열기)`);
+    d.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2" fill="#fff"/><path d="M8 10 V7 a4 4 0 0 1 8 0 v3" stroke="#fff" stroke-width="2.4" fill="none"/></svg><small>${can ? '열기' : '잠김'}<br>${lockedN}칸</small>`;
     d.onclick = ()=>{ if(!over) $('it-slot').click(); };
     w.appendChild(d);
   }
@@ -889,6 +905,8 @@ function afterLeave(left){
 const FEATURE_INFO = {
   mystery: { title: '새로운 차: 물음표 차', text: '색깔이 가려진 까만 차예요. 앞길이 뚫리면 진짜 색깔이 보여요.',
     pic: () => `<div class="sample">${vehicleSVG('X', 2, true, 1, '?')}</div>` },
+  amb: { title: '새로운 차: 구급차', text: '하얀 옷에 빨간 십자가를 단 환자 손님은 구급차만 태울 수 있어요. 구급차는 24명이 타요.',
+    pic: () => `<div class="sample" style="width:180px;height:60px">${vehicleSVG('W', 3, true, 1, 24)}</div>` },
   diag: { title: '새로운 차: 대각선 차', text: '비스듬히 선 차예요. 화살표 쪽 대각선으로 빠져나가요. 모서리끼리 붙은 두 차 사이로는 못 지나가요.',
     pic: () => `<div class="sample" style="width:150px;transform:rotate(-35deg)">${vehicleSVG('B', 2, true, 1, 8)}</div>` },
   tunnel: { title: '새로운 칸: 터널', text: '터널 앞의 차가 빠지면, 터널 안에 있던 차가 같은 자리로 나와요. 숫자는 터널에 남은 차 수예요.',
@@ -904,6 +922,7 @@ function showIntro(){
   if(vehicles.some(v => v.cover) && !progress.seen.cover) introQueue.push('cover');
   if(tunnels.length && !progress.seen.tunnel) introQueue.push('tunnel');
   if(vehicles.some(v => v.diag) && !progress.seen.diag) introQueue.push('diag');
+  if(vehicles.some(v => v.amb) && !progress.seen.amb) introQueue.push('amb');
   nextIntro();
 }
 function nextIntro(){

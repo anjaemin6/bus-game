@@ -563,6 +563,7 @@ function solvesCleanly(L, rec){
   const free = v => {
     const taken = new Set();
     for(const w of vs) if(w !== v && !w.gone && !w.waiting) geoBlock(w).forEach(([x,y]) => taken.add(x+','+y));
+    for(const t of L.tunnels || []) taken.add(t.c+','+t.r);   // 터널은 지나갈 수 없다
     return !geoSwept(v, N).some(([x,y]) => taken.has(x+','+y));
   };
   let removed = 0, boarded = 0;
@@ -766,7 +767,10 @@ function makeLevel(k, mode = 'easy'){
     const tunnels = [];
     if(F.tunnels){
       const rays = new Set();
-      for(const v of vehicles) geoSwept(v, N).forEach(([x,y]) => rays.add(x+','+y));
+      for(const v of vehicles){
+        geoSwept(v, N).forEach(([x,y]) => rays.add(x+','+y));
+        if(v.flip){ const u = {...v}; turnAround(u); geoSwept(u, N).forEach(([x,y]) => rays.add(x+','+y)); }
+      }
       let cands = order.filter(v => !v.cover && !v.diag && !v.amb).map(v => [v, v.h ? (v.dir>0 ? v.c-1 : v.c+v.len) : v.c, v.h ? v.r : (v.dir>0 ? v.r-1 : v.r+v.len)])
         .filter(([v,x,y]) => inb(x,y) && grid[y][x] < 0 && !rays.has(x+','+y));
       for(let t = 0; t < F.tunnels && cands.length; t++){
@@ -1030,7 +1034,11 @@ $('it-slot').onclick = ()=>{
   bays.push(null);
   sfx.board(4); drawBays({opened:bays.length-1}); drawItems(); toast('자리 +1'); kick();
 };
-function occupant(x,y,except){ return vehicles.find(w=>w!==except && !w.gone && !w.waiting && geoBlock(w).some(([a,b])=>a===x&&b===y)); }
+function occupant(x,y,except){
+  const t = tunnels.find(t => t.c===x && t.r===y);
+  if(t) return {id:'tunnel-'+t.id};   // 터널은 지나갈 수 없다
+  return vehicles.find(w=>w!==except && !w.gone && !w.waiting && geoBlock(w).some(([a,b])=>a===x&&b===y));
+}
 function blockerOf(v){
   for(const [x,y] of geoSwept(v, N)){ const o = occupant(x,y,v); if(o) return o; }
   return null;

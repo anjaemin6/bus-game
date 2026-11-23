@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="출발 정류장">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}</style>
+</head>
+<body>
+<title>출발 정류장</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap">
+<style>
+/* Layout: one game column — sidewalk with waiting passengers, 4 bus bays at the curb, the parking lot below. */
+:root{
+  --bg:#dfe9f2; --fg:#1d2430; --muted:#5a6577; --panel:#ffffff; --line:#c9d3df;
+  --asphalt:#3b4250; --asphalt2:#353b48; --stall:#e9edf2; --curb:#f2c94c; --walk:#cfd6de; --walk2:#c3cbd5;
+  --c-R:#e5484d; --c-B:#2f7fe8; --c-Y:#f0a800; --c-G:#1fa36a; --c-P:#8b5cf6; --c-K:#ec4f9c;
+  --accent:#ff7a1a; --skin:#f3c9a0;
+  --display:"Jua","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --body:"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141a22; --fg:#eef2f7; --muted:#9aa5b6; --panel:#212834; --line:#344050;
+  --asphalt:#2a303b; --asphalt2:#252a34; --stall:#b9c1cc; --curb:#d9b43c; --walk:#3a4352; --walk2:#333b49; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141a22; --fg:#eef2f7; --muted:#9aa5b6; --panel:#212834; --line:#344050;
+  --asphalt:#2a303b; --asphalt2:#252a34; --stall:#b9c1cc; --curb:#d9b43c; --walk:#3a4352; --walk2:#333b49; color-scheme:dark}
+html,body{height:100%}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:10px 18px;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+.wrap{max-width:440px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+.wrap.quake{animation:quake .45s}
+@keyframes quake{20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(4px)}}
+
+header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.lv{display:flex;flex-direction:column}
+h1{font-family:var(--display);font-weight:400;font-size:26px;margin:0;line-height:1.1}
+.sub{font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tools{display:flex;gap:6px;flex:0 0 auto}
+.tools .btn{font-size:15px;padding:8px 10px;white-space:nowrap}
+button{font:inherit;cursor:pointer}
+.btn{font-family:var(--display);font-size:16px;padding:8px 12px;border-radius:12px;border:2px solid var(--line);
+  background:var(--panel);color:var(--fg);box-shadow:0 3px 0 var(--line)}
+.btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--line)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 4px 0 #c75a0c;font-size:20px;padding:12px 18px}
+.btn:focus-visible,.veh:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+.progress{height:10px;border-radius:99px;background:var(--panel);border:2px solid var(--line);overflow:hidden}
+.progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--c-G),#7bd88f);transition:width .25s}
+
+/* sidewalk + passengers */
+.street{border-radius:16px;overflow:hidden;box-shadow:0 4px 0 rgba(0,0,0,.08)}
+.walk{position:relative;height:64px;background:repeating-linear-gradient(90deg,var(--walk) 0 38px,var(--walk2) 38px 40px);
+  display:flex;align-items:flex-end;gap:2px;padding:0 10px 4px;overflow:hidden}
+.sign{position:absolute;left:8px;top:6px;font-family:var(--display);font-size:13px;color:#fff;background:#2f7fe8;
+  padding:2px 8px;border-radius:6px;z-index:2}
+.line{display:flex;align-items:flex-end;gap:3px;margin-left:58px;flex:1;min-width:0}
+.pax{flex:0 0 auto;width:26px;height:38px;transition:transform .2s}
+.pax svg{width:100%;height:100%;display:block}
+.pax.first{width:32px;height:46px;animation:bob .6s ease-in-out infinite alternate}
+.pax.walkin{animation:walkin .3s ease-out}
+@keyframes bob{to{transform:translateY(-3px)}}
+@keyframes walkin{from{transform:translateX(30px);opacity:.3}}
+.more{font-family:var(--display);font-size:14px;color:var(--muted);margin-left:auto;padding:0 4px 10px;white-space:nowrap}
+.curb{height:8px;background:repeating-linear-gradient(90deg,var(--curb) 0 20px,#fff 20px 40px)}
+
+.bays{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:var(--asphalt);padding:8px}
+.bay{position:relative;aspect-ratio:1/1.35;border:2px dashed rgba(255,255,255,.45);border-top:0;border-radius:0 0 10px 10px;
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:4px 0 6px;gap:4px}
+.bay .num{position:absolute;bottom:4px;left:0;right:0;text-align:center;font-family:var(--display);font-size:18px;color:rgba(255,255,255,.35)}
+.bay .mini{width:62%;flex:1;min-height:0;display:flex;justify-content:center}
+.bay .mini svg{height:100%;width:auto;max-width:100%;filter:drop-shadow(0 3px 2px rgba(0,0,0,.35))}
+.bay.arrive .mini{animation:arrive .45s cubic-bezier(.2,.8,.3,1.1)}
+.bay.leaving .mini{transform:translateY(-140%);opacity:0;transition:transform .5s ease-in,opacity .5s ease-in}
+.bay.bump .mini{animation:bump .2s}
+@keyframes arrive{from{transform:translateY(120%)}}
+@keyframes bump{50%{transform:scale(1.08)}}
+.cnt{font-family:var(--display);font-size:14px;color:#fff;background:rgba(0,0,0,.45);padding:1px 8px;border-radius:99px;
+  font-variant-numeric:tabular-nums;position:relative;z-index:1}
+.bay.warn{border-color:#ff6b6b}
+
+/* parking lot */
+.board{position:relative;aspect-ratio:1;width:100%;max-width:100%;border-radius:18px;overflow:hidden;
+  background:var(--asphalt);box-shadow:inset 0 0 0 6px var(--asphalt2),0 5px 0 rgba(0,0,0,.12)}
+.board::before{content:"";position:absolute;inset:0;
+  background-image:linear-gradient(90deg,var(--stall) 2px,transparent 2px),linear-gradient(var(--stall) 2px,transparent 2px);
+  background-size:calc(100%/var(--n,6)) calc(100%/var(--n,6));opacity:.16}
+.veh{position:absolute;padding:3%;border:0;background:none;transition:transform .42s cubic-bezier(.55,0,.85,.35);z-index:1}
+.veh svg{width:100%;height:100%;display:block;overflow:visible;filter:drop-shadow(0 4px 3px rgba(0,0,0,.4))}
+.veh:active svg{transform:scale(.96)}
+.veh.shake svg{animation:shake .35s}
+.veh.blocker svg{animation:flash .5s}
+.veh.going{z-index:3}
+@keyframes shake{25%{transform:translate(-4px,0) rotate(-2deg)}50%{transform:translate(4px,0) rotate(2deg)}75%{transform:translate(-2px,0)}}
+@keyframes flash{30%,70%{filter:drop-shadow(0 0 8px #fff) brightness(1.4)}}
+.toast{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);font-family:var(--display);font-size:30px;color:#fff;
+  text-shadow:0 3px 0 rgba(0,0,0,.4);pointer-events:none;z-index:5;white-space:nowrap;animation:toast 1s forwards}
+@keyframes toast{0%{opacity:0;transform:translate(-50%,-30%) scale(.7)}20%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-90%)}}
+
+.items{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.item{position:relative;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 6px;border-radius:14px;
+  border:2px solid var(--line);background:var(--panel);color:var(--fg);font-family:var(--display);font-size:16px;box-shadow:0 4px 0 var(--line)}
+.item:active{transform:translateY(2px);box-shadow:0 2px 0 var(--line)}
+.item svg{width:26px;height:26px;flex:0 0 auto}
+.item .badge{position:absolute;top:-8px;right:-6px;min-width:24px;height:24px;border-radius:99px;background:var(--accent);color:#fff;
+  font-size:14px;display:grid;place-items:center;padding:0 6px;font-variant-numeric:tabular-nums}
+.item:disabled{opacity:.45;cursor:default}
+.item:disabled .badge{background:var(--muted)}
+.item.on{border-color:var(--accent);background:var(--accent);color:#fff;box-shadow:0 4px 0 #c75a0c}
+.items.nudge .item:not(:disabled){animation:nudge .5s 2}
+@keyframes nudge{50%{transform:translateY(-6px)}}
+.board.towing{box-shadow:inset 0 0 0 6px var(--accent),0 5px 0 rgba(0,0,0,.12)}
+.veh.lift{transform:scale(1.25)!important;opacity:0;transition:transform .45s ease-in,opacity .45s ease-in}
+.hint{font-family:var(--display);font-size:16px;color:var(--accent);text-align:center;margin:0;min-height:1.4em}
+.help{font-size:14px;color:var(--muted);line-height:1.55;margin:0}
+.help b{color:var(--fg)}
+
+.overlay{position:fixed;inset:0;background:rgba(10,14,20,.6);display:grid;place-items:center;padding:16px;z-index:20}
+.card{background:var(--panel);color:var(--fg);border-radius:22px;padding:24px 22px 22px;max-width:340px;width:100%;
+  text-align:center;display:flex;flex-direction:column;gap:12px;animation:pop .35s cubic-bezier(.2,.9,.3,1.3)}
+@keyframes pop{from{transform:scale(.7);opacity:0}}
+.card h2{font-family:var(--display);font-weight:400;font-size:32px;margin:0}
+.card p{margin:0;font-size:16px;color:var(--muted);line-height:1.5}
+.row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--bg);padding:4px;border-radius:14px}
+.tab{font-family:var(--display);font-size:18px;padding:10px;border:0;border-radius:11px;background:none;color:var(--muted)}
+.tab.on{background:var(--panel);color:var(--fg);box-shadow:0 2px 0 var(--line)}
+.tab.on.hard{background:#e5484d;color:#fff;box-shadow:0 2px 0 #a8282c}
+.levels{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.lvbtn{aspect-ratio:1;border-radius:12px;border:2px solid var(--line);background:var(--bg);color:var(--fg);
+  font-family:var(--display);font-size:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:0}
+.lvbtn small{font-size:11px;letter-spacing:-1px;color:#ffc21a;min-height:13px}
+.lvbtn.cur{border-color:var(--accent)}
+.lvbtn.clear{background:var(--panel)}
+.lvbtn:disabled{opacity:.4;cursor:default}
+.lvbtn:disabled small{color:var(--muted)}
+.diff{display:inline-block;font-size:12px;padding:1px 7px;border-radius:99px;background:var(--line);color:var(--fg);vertical-align:2px}
+.diff.hard{background:#e5484d;color:#fff}
+.stars{font-size:46px;letter-spacing:6px;line-height:1}
+.stars span{color:var(--line)} .stars span.on{color:#ffc21a;text-shadow:0 3px 0 #d39400}
+canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:30}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div id="nojs" style="max-width:440px;margin:0 auto 10px;padding:14px 16px;border-radius:14px;background:#fff3cd;color:#5c4400;border:2px solid #f0c040;font-size:16px;line-height:1.5">
+  <b>게임이 아직 시작되지 않았어요.</b><br>
+  지금 화면은 미리보기라서 게임이 움직이지 않을 수 있어요.
+  파일을 맥에 저장한 다음 <b>오른쪽 클릭 → 다음으로 열기 → Safari</b>(또는 Chrome)로 열어 주세요.
+</div>
+<div class="wrap" id="wrap">
+  <header>
+    <div class="lv">
+      <h1>출발 정류장</h1>
+      <span class="sub" id="stat">1단계</span>
+    </div>
+    <div class="tools">
+      <button class="btn" id="levelsBtn">단계</button>
+      <button class="btn" id="sound">소리 켬</button>
+      <button class="btn" id="restart">다시</button>
+    </div>
+  </header>
+  <div class="progress" aria-hidden="true"><i id="bar"></i></div>
+
+  <div class="street">
+    <div class="walk"><span class="sign">정류장</span><div class="line" id="queue"></div></div>
+    <div class="curb"></div>
+    <div class="bays" id="bays"></div>
+  </div>
+
+  <div class="items" id="items">
+    <button class="item" id="it-tow" aria-label="견인차: 막힌 차도 바로 꺼내기">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="13" width="18" height="10" rx="3" fill="#ff7a1a"/><rect x="18" y="16" width="10" height="7" rx="2" fill="#ffb066"/>
+        <path d="M6 13 L14 4 h4" stroke="#5a6577" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M18 4 v5 a2 2 0 0 1 -3 1" stroke="#5a6577" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <circle cx="8" cy="25" r="3.5" fill="#1b1e24"/><circle cx="23" cy="25" r="3.5" fill="#1b1e24"/></svg>
+      견인차<span class="badge" id="n-tow">1</span></button>
+    <button class="item" id="it-swap" aria-label="줄 바꾸기: 맨 앞 손님을 맨 뒤로">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 11 h18 l-5 -5 M27 21 h-18 l5 5" stroke="#2f7fe8" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      줄 바꾸기<span class="badge" id="n-swap">2</span></button>
+    <button class="item" id="it-slot" aria-label="자리 추가: 정류장 한 칸 늘리기">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="6" width="24" height="20" rx="4" fill="none" stroke="#1fa36a" stroke-width="3" stroke-dasharray="4 3"/><path d="M16 11 v10 M11 16 h10" stroke="#1fa36a" stroke-width="3.2" stroke-linecap="round"/></svg>
+      자리 추가<span class="badge" id="n-slot">1</span></button>
+  </div>
+  <p class="hint" id="hint"></p>
+
+  <div class="board" id="board" aria-label="주차장"></div>
+
+  <p class="help"><b>차를 누르면</b> 머리 쪽으로 빠져나가 정류장에 섭니다. 앞이 막힌 차는 못 나가요.
+    맨 앞 손님부터 <b>같은 색 차</b>에 타고, 자리가 차면 출발해요. 정류장이 꽉 막히면 집니다.
+    막히면 <b>아이템</b>을 써 보세요. 아이템을 안 쓰고 깨면 별을 더 받아요.</p>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="card">
+    <div class="stars" id="stars" hidden></div>
+    <h2 id="ovTitle"></h2>
+    <p id="ovText"></p>
+    <div class="row">
+      <button class="btn primary" id="ovRescue">자리 하나 더 받고 계속하기</button>
+      <button class="btn" id="ovRetry">다시 하기</button>
+      <button class="btn primary" id="ovBtn">다음 단계</button>
+    </div>
+  </div>
+</div>
+<div class="overlay" id="picker" hidden>
+  <div class="card">
+    <h2>단계 고르기</h2>
+    <div class="tabs" role="tablist">
+      <button class="tab" id="tab-easy" role="tab">보통</button>
+      <button class="tab hard" id="tab-hard" role="tab">어려움</button>
+    </div>
+    <p id="modeNote"></p>
+    <div class="levels" id="levelGrid"></div>
+    <button class="btn" id="pickClose">닫기</button>
+  </div>
+</div>
+<canvas id="fx"></canvas>
+
+<script>
+let N = 6; const START_BAYS = 4;
+let items, mode = null, used = 0, rescued = false;
+const SYM = {R:'●', B:'■', Y:'▲', G:'◆', P:'★', K:'♥'};
+const NAME = {R:'빨강', B:'파랑', Y:'노랑', G:'초록', P:'보라', K:'분홍'};
+let diff = 'easy', levelNo = 1, current;
+let progress = {easy:{unlocked:1, stars:{}}, hard:{unlocked:1, stars:{}}};
+try{ const p = JSON.parse(localStorage.getItem('bus-progress')||'null'); if(p && p.easy && p.hard) progress = p;
+  const last = JSON.parse(localStorage.getItem('bus-last')||'null'); if(last && progress[last.diff] && last.level>=1 && last.level<=progress[last.diff].unlocked){ diff = last.diff; levelNo = last.level; } }catch(e){}
+function saveProgress(){ try{ localStorage.setItem('bus-progress', JSON.stringify(progress)); localStorage.setItem('bus-last', JSON.stringify({diff, level:levelNo})); }catch(e){} }
+// [id, color, col, row, length, horizontal, dir(+1 right/down, -1 left/up)]
+/* Level data. Level 1 is hand-made; the rest are generated so that a clean solution always exists:
+   each new vehicle's exit path avoids every vehicle placed before it, so removing them in reverse
+   placement order always works, and passengers are only mixed within small groups of that order. */
+const COLORSET = ['R','B','Y','G','P','K'];
+const LEVEL_PARAMS = [null, null,
+  {n:6, count:9,  colors:4, group:2, bus:.30},
+  {n:6, count:10, colors:4, group:2, bus:.35},
+  {n:6, count:11, colors:5, group:2, bus:.35},
+  {n:6, count:11, colors:5, group:3, bus:.40},
+  {n:7, count:13, colors:5, group:3, bus:.40},
+  {n:7, count:14, colors:5, group:3, bus:.45},
+  {n:7, count:15, colors:6, group:3, bus:.45},
+  {n:7, count:16, colors:6, group:3, bus:.50},
+  {n:7, count:17, colors:6, group:3, bus:.50},
+];
+const HARD_PARAMS = [null,
+  {n:6, count:10, colors:4, group:3, bus:.40},
+  {n:6, count:11, colors:5, group:3, bus:.40},
+  {n:7, count:13, colors:5, group:3, bus:.45},
+  {n:7, count:14, colors:5, group:4, bus:.45},
+  {n:7, count:15, colors:6, group:4, bus:.50},
+  {n:7, count:16, colors:6, group:4, bus:.50},
+  {n:8, count:18, colors:6, group:4, bus:.50},
+  {n:8, count:19, colors:6, group:4, bus:.55},
+  {n:8, count:20, colors:6, group:4, bus:.55},
+  {n:8, count:22, colors:6, group:4, bus:.60},
+];
+const LEVEL_COUNT = LEVEL_PARAMS.length - 1;
+// items per mode; hard mode is meant to be cleared mostly by planning
+const MODE_ITEMS = { easy:{tow:1, swap:2, slot:1}, hard:{tow:1, swap:1, slot:0} };
+
+// Plays the intended order with the game's rules (leftmost bus boards first, 4 bays, no items).
+function solvesCleanly(L){
+  const N = L.n, vs = L.vehicles.map(v => ({...v, cap: v.len===3?6:4, gone:false}));
+  const queue = L.queue.slice(), bays = [null,null,null,null];
+  const occ = (x,y) => vs.some(v => !v.gone && (v.h ? (y===v.r && x>=v.c && x<v.c+v.len) : (x===v.c && y>=v.r && y<v.r+v.len)));
+  const free = v => { let x,y; if(v.h){x=v.dir>0?v.c+v.len:v.c-1;y=v.r}else{x=v.c;y=v.dir>0?v.r+v.len:v.r-1}
+    while(x>=0&&y>=0&&x<N&&y<N){ if(occ(x,y)) return false; if(v.h)x+=v.dir; else y+=v.dir; } return true; };
+  for(const v of vs.slice().reverse()){
+    const b = bays.indexOf(null);
+    if(!free(v) || b < 0) return false;
+    v.gone = true; bays[b] = {v, n:0};
+    for(;;){ const i = bays.findIndex(s => s && queue.length && s.v.color===queue[0] && s.n<s.v.cap); if(i<0) break;
+      queue.shift(); if(++bays[i].n === bays[i].v.cap) bays[i] = null; }
+  }
+  return !queue.length && bays.every(s => !s);
+}
+
+function seeded(seed){ return () => (seed = (seed*1664525 + 1013904223) >>> 0) / 4294967296; }
+
+function makeLevel(k, mode = 'easy'){
+  const hard = mode === 'hard';
+  if(k === 1 && !hard){
+    // listed in placement order: the clean solution removes them from the end (a, b, h, g, f, e, d, c)
+    const L1 = [['c','Y',0,2,3,true,1],['d','G',4,1,2,false,1],['e','R',2,4,3,true,-1],['f','B',0,3,2,false,1],
+      ['g','Y',5,3,2,false,-1],['h','G',4,0,2,true,-1],['b','B',2,0,2,false,-1],['a','R',0,0,2,true,-1]];
+    return { n:6, vehicles: L1.map(([id,color,c,r,len,h,dir]) => ({id,color,c,r,len,h,dir})),
+      queue: ('RRBRBBRB'+'GYGGYGYY'+'BRBRRBRBRR'+'GYYGYGYGYY').split('') };
+  }
+  const P = (hard ? HARD_PARAMS : LEVEL_PARAMS)[k], N = P.n;
+  for(let attempt = 0; attempt < 400; attempt++){
+    const R = seeded(k*7919 + attempt*104729 + (hard ? 977 : 13));
+    const grid = Array.from({length:N}, () => Array(N).fill(-1));
+    const inb = (x,y) => x>=0 && y>=0 && x<N && y<N;
+    const vs = [];
+    for(let i = 0; i < P.count; i++){
+      const want = R() < P.bus ? 3 : 2;
+      const cands = [];
+      for(const len of [2,3]) for(const h of [true,false]) for(const dir of [1,-1])
+      for(let c = 0; c < N; c++) for(let r = 0; r < N; r++){
+        const cs = []; let ok = true;
+        for(let j = 0; j < len; j++){ const x = h?c+j:c, y = h?r:r+j; if(!inb(x,y) || grid[y][x] >= 0){ ok = false; break; } cs.push([x,y]); }
+        if(!ok) continue;
+        const path = []; let x, y;
+        if(h){ x = dir>0 ? c+len : c-1; y = r; } else { x = c; y = dir>0 ? r+len : r-1; }
+        while(inb(x,y)){ if(grid[y][x] >= 0){ ok = false; break; } path.push([x,y]); if(h) x += dir; else y += dir; }
+        if(!ok) continue;
+        let score = 0;
+        for(const v of vs) if(v.path.some(([px,py]) => cs.some(([a,b]) => a===px && b===py))) score++;
+        cands.push({c,r,len,h,dir,cs,path,score});
+      }
+      if(!cands.length) break;
+      const sized = cands.filter(q => q.len === want);
+      const pool = sized.length ? sized : cands;
+      const best = Math.max(...pool.map(q => q.score));
+      const top = pool.filter(q => q.score >= best - (!hard && R() < .3 ? 1 : 0));
+      const q = top[Math.floor(R()*top.length)];
+      q.cs.forEach(([x,y]) => grid[y][x] = i);
+      vs.push(q);
+    }
+    if(vs.length < P.count) continue;
+    const palette = COLORSET.slice(0, P.colors);
+    const colors = vs.map((_,i) => i < P.colors ? palette[i] : palette[Math.floor(R()*P.colors)]);
+    for(let i = colors.length-1; i > 0; i--){ const j = Math.floor(R()*(i+1)); [colors[i],colors[j]] = [colors[j],colors[i]]; }
+    const vehicles = vs.map((v,i) => ({id:'v'+i, color:colors[i], c:v.c, r:v.r, len:v.len, h:v.h, dir:v.dir}));
+    const order = vehicles.slice().reverse();
+    const queue = [];
+    for(let g = 0; g < order.length; g += P.group){
+      const chunk = [];
+      order.slice(g, g+P.group).forEach(v => { for(let s = 0; s < (v.len===3?6:4); s++) chunk.push(v.color); });
+      for(let i = chunk.length-1; i > 0; i--){ const j = Math.floor(R()*(i+1)); [chunk[i],chunk[j]] = [chunk[j],chunk[i]]; }
+      queue.push(...chunk);
+    }
+    const level = {n:N, vehicles, queue};
+    if(solvesCleanly(level)) return level;
+  }
+  return null;
+}
+
+let vehicles, bays, queue, mistakes, busy, over, ticking, startAt, soundOn = true;
+try{ soundOn = localStorage.getItem('bus-sound') !== 'off'; }catch(e){}
+const $ = id => document.getElementById(id);
+const C = c => `var(--c-${c})`;
+
+/* ---------- drawings ---------- */
+function vehicleSVG(color, len, h, dir){
+  const L = len*100, W = 100;
+  const bus = len === 3;
+  // drawn facing +x in a L×W box, then rotated into place
+  let t = '';
+  if(h && dir<0) t = `translate(${L},${W}) rotate(180)`;
+  if(!h && dir>0) t = `translate(${W},0) rotate(90)`;
+  if(!h && dir<0) t = `translate(0,${L}) rotate(-90)`;
+  const vb = h ? `0 0 ${L} ${W}` : `0 0 ${W} ${L}`;
+  const wheels = (bus ? [40, L-120, L-70] : [36, L-62]).map(x =>
+    `<rect x="${x}" y="4" width="34" height="14" rx="5" fill="#1b1e24"/><rect x="${x}" y="82" width="34" height="14" rx="5" fill="#1b1e24"/>`).join('');
+  let top;
+  if(bus){
+    const wins = [];
+    for(let x=40; x<L-90; x+=38){ wins.push(`<rect x="${x}" y="17" width="30" height="12" rx="3" fill="#bfe3ff" opacity=".9"/><rect x="${x}" y="71" width="30" height="12" rx="3" fill="#bfe3ff" opacity=".9"/>`); }
+    top = `
+      <rect x="4" y="12" width="${L-8}" height="76" rx="16" fill="${C(color)}"/>
+      <rect x="4" y="12" width="${L-8}" height="76" rx="16" fill="url(#shade)"/>
+      ${wins.join('')}
+      <rect x="34" y="34" width="${L-120}" height="32" rx="8" fill="#fff" opacity=".22"/>
+      <rect x="${L/2-40}" y="38" width="44" height="24" rx="5" fill="#fff" opacity=".35"/>
+      <path d="M${L-52} 16 h24 q20 0 20 20 v28 q0 20 -20 20 h-24 z" fill="#1c3a52"/>
+      <path d="M${L-50} 20 h20 q14 0 14 16 v8 z" fill="#fff" opacity=".25"/>`;
+  } else {
+    top = `
+      <rect x="6" y="12" width="${L-12}" height="76" rx="22" fill="${C(color)}"/>
+      <rect x="6" y="12" width="${L-12}" height="76" rx="22" fill="url(#shade)"/>
+      <path d="M48 22 h24 v56 h-24 q-10 0 -10 -10 v-36 q0 -10 10 -10z" fill="#1c3a52"/>
+      <rect x="72" y="20" width="62" height="60" rx="10" fill="${C(color)}"/>
+      <rect x="72" y="20" width="62" height="60" rx="10" fill="#fff" opacity=".18"/>
+      <path d="M134 20 h14 q14 0 14 14 v32 q0 14 -14 14 h-14 z" fill="#1c3a52"/>
+      <path d="M137 25 h9 q9 0 9 9 v6 z" fill="#fff" opacity=".3"/>`;
+  }
+  const lights = `<rect x="${L-14}" y="18" width="8" height="16" rx="3" fill="#fff6c2"/><rect x="${L-14}" y="66" width="8" height="16" rx="3" fill="#fff6c2"/>
+    <rect x="6" y="20" width="6" height="12" rx="2" fill="#ff5a5a"/><rect x="6" y="68" width="6" height="12" rx="2" fill="#ff5a5a"/>`;
+  const arrow = `<path d="M${L/2+(bus?40:0)-8} 36 l20 14 l-20 14" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/>`;
+  const sym = `<text x="${bus?L/2-30:103}" y="58" font-size="22" text-anchor="middle" fill="#fff" opacity=".9" font-family="sans-serif">${SYM[color]}</text>`;
+  return `<svg viewBox="${vb}" aria-hidden="true"><defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".25"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".22"/></linearGradient></defs>
+    <g transform="${t}">${wheels}${top}${lights}${arrow}${sym}</g></svg>`;
+}
+function personSVG(color){
+  return `<svg viewBox="0 0 26 40" aria-hidden="true">
+    <ellipse cx="13" cy="38" rx="9" ry="2" fill="#000" opacity=".18"/>
+    <rect x="7" y="29" width="5" height="9" rx="2" fill="#2d3340"/><rect x="14" y="29" width="5" height="9" rx="2" fill="#2d3340"/>
+    <path d="M4 31 v-9 a9 9 0 0 1 18 0 v9 z" fill="${C(color)}"/>
+    <text x="13" y="29" font-size="8" text-anchor="middle" fill="#fff" font-family="sans-serif">${SYM[color]}</text>
+    <circle cx="13" cy="9" r="7" fill="var(--skin)"/>
+    <path d="M6 8 a7 7 0 0 1 14 0 q-7 -4 -14 0z" fill="#3a2a20"/>
+    <circle cx="10.5" cy="10" r="1" fill="#222"/><circle cx="15.5" cy="10" r="1" fill="#222"/></svg>`;
+}
+
+/* ---------- sound ---------- */
+let ac;
+function tone(freq, dur, type='sine', vol=.15, slide=0, delay=0){
+  if(!soundOn) return;
+  try{
+    ac = ac || new (window.AudioContext||window.webkitAudioContext)();
+    const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if(slide) o.frequency.exponentialRampToValueAtTime(freq*slide, t+dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t+dur);
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t+dur);
+  }catch(e){}
+}
+const sfx = {
+  go(){ tone(140,.35,'sawtooth',.06,2.2); },
+  honk(){ tone(380,.12,'square',.07); tone(300,.18,'square',.07,1,.13); },
+  board(n){ tone(520+n*45,.09,'triangle',.12); },
+  depart(){ tone(110,.6,'sawtooth',.06,3); tone(660,.1,'sine',.1,1.5,.05); },
+  win(){ [523,659,784,1046].forEach((f,i)=>tone(f,.25,'triangle',.14,1,i*.13)); },
+  lose(){ [330,262,196].forEach((f,i)=>tone(f,.3,'sawtooth',.07,1,i*.18)); },
+};
+function buzz(ms){ try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){} }
+
+/* ---------- game ---------- */
+function init(){
+  current = makeLevel(levelNo, diff); N = current.n;
+  $('board').style.setProperty('--n', N);
+  vehicles = current.vehicles.map(v => ({...v, cap:v.len===3?6:4, gone:false}));
+  bays = Array(START_BAYS).fill(null);
+  queue = current.queue.slice(); lastQueueLen = queue.length; stuckWarned = false;
+  rescued = false; mistakes = 0; used = 0; busy = false; over = false; startAt = Date.now();
+  items = {...MODE_ITEMS[diff]}; mode = null; saveProgress();
+  $('overlay').hidden = true; stopFx();
+  drawBoard(); drawQueue(); drawBays(); drawStat(); drawItems();
+}
+
+/* ---------- items ---------- */
+function drawItems(){
+  for(const k of ['tow','swap','slot']){
+    $('n-'+k).textContent = items[k];
+    $('it-'+k).disabled = over || items[k] <= 0 || (k==='swap' && queue.length < 2) || (k==='tow' && !vehicles.some(v=>!v.gone));
+  }
+  $('it-tow').classList.toggle('on', mode==='tow');
+  $('board').classList.toggle('towing', mode==='tow');
+  $('hint').textContent = mode==='tow' ? '꺼낼 차를 누르세요 (다시 누르면 취소)' : '';
+}
+$('it-tow').onclick = ()=>{
+  if(over) return;
+  if(mode==='tow'){ mode=null; drawItems(); return; }
+  if(bays.indexOf(null) < 0){ toast('정류장 자리가 없어요'); sfx.honk(); return; }
+  mode = 'tow'; sfx.board(1); drawItems();
+};
+$('it-swap').onclick = ()=>{
+  if(over || busy || queue.length < 2 || items.swap <= 0) return;
+  items.swap--; used++;
+  queue.push(queue.shift());
+  sfx.board(2); toast('줄 바꿈!'); drawQueue(); drawItems(); kick();
+};
+$('it-slot').onclick = ()=>{
+  if(over || items.slot <= 0) return;
+  items.slot--; used++;
+  bays.push(null);
+  sfx.board(4); drawBays({arrive:-1}); drawItems(); toast('자리 +1'); kick();
+};
+function cells(v){ const o=[]; for(let i=0;i<v.len;i++) o.push(v.h?[v.c+i,v.r]:[v.c,v.r+i]); return o; }
+function occupant(x,y){ return vehicles.find(v=>!v.gone && cells(v).some(([a,b])=>a===x&&b===y)); }
+function blockerOf(v){
+  let x, y;
+  if(v.h){ x = v.dir>0 ? v.c+v.len : v.c-1; y = v.r; } else { x = v.c; y = v.dir>0 ? v.r+v.len : v.r-1; }
+  while(x>=0&&x<N&&y>=0&&y<N){ const o = occupant(x,y); if(o) return o; if(v.h) x+=v.dir; else y+=v.dir; }
+  return null;
+}
+
+function drawBoard(){
+  const b = $('board'); b.querySelectorAll('.veh').forEach(e=>e.remove());
+  for(const v of vehicles){
+    if(v.gone) continue;
+    const el = document.createElement('button');
+    el.className = 'veh'; el.id = 'veh-'+v.id;
+    el.style.left = v.c/N*100+'%'; el.style.top = v.r/N*100+'%';
+    el.style.width = (v.h?v.len:1)/N*100+'%'; el.style.height = (v.h?1:v.len)/N*100+'%';
+    const way = v.h ? (v.dir>0?'오른쪽':'왼쪽') : (v.dir>0?'아래':'위');
+    el.setAttribute('aria-label', `${NAME[v.color]} ${v.len===3?'버스':'승합차'}, ${way}으로 나감`);
+    el.innerHTML = vehicleSVG(v.color, v.len, v.h, v.dir);
+    el.onclick = () => tap(v, el);
+    b.appendChild(el);
+  }
+}
+let lastQueueLen = 0;
+function drawQueue(){
+  const q = $('queue'); q.innerHTML='';
+  if(!queue.length){ q.innerHTML='<span class="more">모두 탔어요!</span>'; return; }
+  const show = Math.min(queue.length, 10);
+  for(let i=0;i<show;i++){
+    const p = document.createElement('span');
+    p.className = 'pax'+(i===0?' first':'')+(i===show-1 && queue.length<lastQueueLen && queue.length>=10?' walkin':'');
+    p.innerHTML = personSVG(queue[i]); q.appendChild(p);
+  }
+  if(queue.length>10){ const m=document.createElement('span'); m.className='more'; m.textContent=`+${queue.length-10}`; q.appendChild(m); }
+  lastQueueLen = queue.length;
+}
+function drawBays(flags={}){
+  const w = $('bays'); w.innerHTML='';
+  w.style.gridTemplateColumns = `repeat(${bays.length},1fr)`;
+  const almost = bays.filter(Boolean).length >= bays.length-1;
+  bays.forEach((s,i)=>{
+    const d = document.createElement('div');
+    d.className = 'bay' + (s&&s.leaving?' leaving':'') + (flags.arrive===i?' arrive':'') + (flags.bump===i?' bump':'') + (!s&&almost&&!over?' warn':'');
+    if(s){
+      d.innerHTML = `<div class="mini">${vehicleSVG(s.v.color, s.v.len, false, -1)}</div><span class="cnt">${s.n}/${s.v.cap}</span>`;
+    } else d.innerHTML = `<span class="num">${i+1}</span>`;
+    w.appendChild(d);
+  });
+}
+function drawStat(){
+  const total = current.queue.length, done = total - queue.length;
+  $('stat').innerHTML = `<span class="diff${diff==='hard'?' hard':''}">${diff==='hard'?'어려움':'보통'}</span> ${levelNo}단계 · 손님 ${done}/${total}`;
+  $('bar').style.width = done/total*100 + '%';
+}
+function toast(text){
+  const t = document.createElement('div'); t.className='toast'; t.textContent=text;
+  $('board').appendChild(t); setTimeout(()=>t.remove(), 1000);
+}
+
+function tap(v, el){
+  if(busy||over||v.gone) return;
+  const free = bays.indexOf(null);
+  if(mode==='tow'){
+    if(free<0){ mode=null; drawItems(); toast('정류장 자리가 없어요'); return; }
+    mode = null; items.tow--; used++; busy = true;
+    sfx.depart(); buzz(20); el.classList.add('going','lift'); drawItems();
+    setTimeout(()=>{
+      v.gone = true; el.remove(); bays[free] = {v, n:0, leaving:false};
+      busy = false; drawBays({arrive:free}); drawStat(); drawItems(); setTimeout(kick, 300);
+    }, 470);
+    return;
+  }
+  const blk = blockerOf(v);
+  if(blk || free<0){
+    mistakes++; sfx.honk(); buzz(40);
+    el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
+    if(blk){ const be=$('veh-'+blk.id); if(be){ be.classList.remove('blocker'); void be.offsetWidth; be.classList.add('blocker'); } }
+    else toast('정류장이 꽉 찼어요');
+    return;
+  }
+  busy = true; sfx.go(); buzz(15);
+  const cell = $('board').clientWidth/N;
+  const dist = (v.h ? (v.dir>0 ? N-v.c : v.c+v.len) : (v.dir>0 ? N-v.r : v.r+v.len)) + .5;
+  el.classList.add('going');
+  el.style.transform = v.h ? `translateX(${v.dir*dist*cell}px)` : `translateY(${v.dir*dist*cell}px)`;
+  setTimeout(()=>{
+    v.gone = true; el.remove();
+    bays[free] = {v, n:0, leaving:false};
+    busy = false; drawBays({arrive:free}); drawStat();
+    setTimeout(kick, 300);
+  }, 430);
+}
+
+function kick(){ if(!ticking){ ticking = true; setTimeout(step, 170); } }
+function step(){
+  ticking = false; if(over) return;
+  if(queue.length){
+    // passengers take the leftmost matching bus
+    const i = bays.findIndex(s=>s && !s.leaving && s.v.color===queue[0] && s.n<s.v.cap);
+    if(i>=0){
+      const s = bays[i];
+      queue.shift(); s.n++; sfx.board(s.n);
+      if(s.n===s.v.cap){
+        s.leaving = true;
+        setTimeout(()=>{ sfx.depart(); toast('출발!'); }, 120);
+        setTimeout(()=>{ bays[bays.indexOf(s)] = null; drawBays(); checkEnd(); kick(); }, 650);
+      }
+      drawQueue(); drawBays({bump:i}); drawStat(); drawItems(); kick(); return;
+    }
+  }
+  checkEnd();
+}
+function checkEnd(){
+  if(over) return;
+  if(!queue.length && bays.every(s=>!s)){ finish(true); return; }
+  if(bays.some(s=>s&&s.leaving)) return;
+  if(queue.length && bays.every(s=>s) && !bays.some(s=>s.v.color===queue[0])){
+    // tow needs a free bay, so only swap and slot can rescue a full stop
+    const canSave = items.slot > 0 || (items.swap > 0 && queue.length > 1);
+    if(canSave){
+      if(!stuckWarned){ stuckWarned = true; toast('막혔어요! 아이템!'); sfx.honk(); }
+      const it=$('items'); it.classList.remove('nudge'); void it.offsetWidth; it.classList.add('nudge');
+    } else finish(false);
+  } else stuckWarned = false;
+}
+let stuckWarned = false;
+function finish(win){
+  over = true;
+  const secs = Math.round((Date.now()-startAt)/1000);
+  const score = mistakes + used*2;
+  const stars = score===0 ? 3 : score<=3 ? 2 : 1;
+  mode = null; drawItems();
+  $('stars').hidden = !win;
+  $('stars').innerHTML = [1,2,3].map(k=>`<span class="${win&&k<=stars?'on':''}">★</span>`).join('');
+  $('ovTitle').textContent = win ? '모두 출발했어요!' : '정류장이 꽉 찼어요';
+  $('ovText').textContent = win
+    ? `${secs}초 만에 손님 ${current.queue.length}명을 다 태웠어요.` + (mistakes ? ` 막힌 차를 ${mistakes}번 눌렀어요.` : ' 한 번도 안 막혔어요!') + (used ? ` 아이템 ${used}개 사용.` : '')
+    : `맨 앞 ${NAME[queue[0]]} 손님이 탈 차가 없어요.` + (rescued ? ' 차 빼는 순서를 바꿔서 다시 해 보세요.' : ' 정류장 자리를 하나 더 받아서 이어 할 수 있어요.');
+  const last = levelNo >= LEVEL_COUNT;
+  $('ovRetry').hidden = !win;
+  $('ovRescue').hidden = win || rescued;
+  $('ovBtn').textContent = !win ? '다시 하기' : last ? '단계 고르기' : '다음 단계';
+  if(win){
+    const pr = progress[diff];
+    pr.stars[levelNo] = Math.max(pr.stars[levelNo]||0, stars);
+    pr.unlocked = Math.max(pr.unlocked, Math.min(LEVEL_COUNT, levelNo+1));
+    if(last && diff==='easy') $('ovText').textContent += ' 보통 모드를 다 깼어요! 어려운 모드에 도전해 보세요.';
+    saveProgress(); sfx.win(); confetti();
+  }
+  else { sfx.lose(); buzz([60,40,60]); const w=$('wrap'); w.classList.remove('quake'); void w.offsetWidth; w.classList.add('quake'); }
+  setTimeout(()=>{ $('overlay').hidden = false; $('ovBtn').focus(); }, win?700:500);
+}
+
+/* ---------- confetti ---------- */
+let fxRaf;
+function confetti(){
+  const cv = $('fx'), ctx = cv.getContext('2d'), dpr = devicePixelRatio||1;
+  cv.width = innerWidth*dpr; cv.height = innerHeight*dpr; ctx.scale(dpr,dpr);
+  const cols = ['#e5484d','#2f7fe8','#f0a800','#1fa36a','#ff7a1a','#ffffff'];
+  const ps = Array.from({length:140},()=>({x:innerWidth/2+(Math.random()-.5)*80,y:innerHeight*.35,
+    vx:(Math.random()-.5)*12,vy:-Math.random()*13-4,r:Math.random()*6+4,a:Math.random()*6,va:(Math.random()-.5)*.3,c:cols[Math.random()*cols.length|0]}));
+  const t0 = performance.now();
+  (function frame(t){
+    ctx.clearRect(0,0,innerWidth,innerHeight);
+    for(const p of ps){ p.vy+=.35; p.vx*=.99; p.x+=p.vx; p.y+=p.vy; p.a+=p.va;
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.a); ctx.fillStyle=p.c; ctx.fillRect(-p.r/2,-p.r/4,p.r,p.r/2); ctx.restore(); }
+    if(t-t0<3500) fxRaf = requestAnimationFrame(frame); else stopFx();
+  })(t0);
+}
+function stopFx(){ cancelAnimationFrame(fxRaf); const cv=$('fx'); cv.getContext('2d').clearRect(0,0,cv.width,cv.height); }
+
+function syncSound(){ $('sound').textContent = soundOn ? '소리 켬' : '소리 끔'; }
+$('sound').onclick = ()=>{ soundOn = !soundOn; syncSound(); try{ localStorage.setItem('bus-sound', soundOn?'on':'off'); }catch(e){} if(soundOn) sfx.board(3); };
+$('restart').onclick = init;
+$('ovBtn').onclick = ()=>{
+  if(!$('ovRetry').hidden){                     // won
+    if(levelNo >= LEVEL_COUNT){ $('overlay').hidden = true; openPicker(diff==='easy' ? 'hard' : diff); return; }
+    levelNo++;
+  }
+  init();
+};
+$('ovRetry').onclick = init;
+// one rescue per attempt: an extra bay so a stuck game can still be finished
+$('ovRescue').onclick = ()=>{
+  rescued = true; over = false; used++; stuckWarned = false;
+  $('overlay').hidden = true; $('wrap').classList.remove('quake');
+  bays.push(null); sfx.board(4); drawBays({arrive:-1}); drawItems(); toast('자리 +1'); kick();
+};
+
+/* ---------- level picker ---------- */
+let pickDiff = 'easy';
+function openPicker(d){ pickDiff = d || diff; drawPicker(); $('picker').hidden = false; }
+function drawPicker(){
+  $('tab-easy').classList.toggle('on', pickDiff==='easy'); $('tab-hard').classList.toggle('on', pickDiff==='hard');
+  $('tab-easy').setAttribute('aria-selected', pickDiff==='easy'); $('tab-hard').setAttribute('aria-selected', pickDiff==='hard');
+  $('modeNote').textContent = pickDiff==='hard'
+    ? '판이 크고 차가 더 촘촘해요. 정류장 4칸을 빈틈없이 써야 하고, 아이템은 견인차 1 · 줄 바꾸기 1뿐이에요.'
+    : '처음이라면 여기부터. 아이템: 견인차 1 · 줄 바꾸기 2 · 자리 추가 1';
+  const pr = progress[pickDiff], g = $('levelGrid'); g.innerHTML = '';
+  for(let k=1;k<=LEVEL_COUNT;k++){
+    const b = document.createElement('button'); const st = pr.stars[k]||0;
+    b.className = 'lvbtn' + (st?' clear':'') + (pickDiff===diff && k===levelNo ? ' cur':'');
+    b.disabled = k > pr.unlocked;
+    b.innerHTML = `${k}<small>${k>pr.unlocked ? '잠김' : '★'.repeat(st)}</small>`;
+    b.setAttribute('aria-label', k>pr.unlocked ? `${k}단계, 잠김` : `${k}단계, 별 ${st}개`);
+    b.onclick = ()=>{ diff = pickDiff; levelNo = k; $('picker').hidden = true; init(); };
+    g.appendChild(b);
+  }
+}
+$('levelsBtn').onclick = ()=>openPicker();
+$('tab-easy').onclick = ()=>{ pickDiff='easy'; drawPicker(); };
+$('tab-hard').onclick = ()=>{ pickDiff='hard'; drawPicker(); };
+$('pickClose').onclick = ()=>{ $('picker').hidden = true; };
+addEventListener('resize', ()=>{ if(!busy) drawBoard(); });
+document.getElementById('nojs').remove();
+syncSound(); init();
+</script>
+
+</body>
+</html>

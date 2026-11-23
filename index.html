@@ -58,8 +58,8 @@ button{font:inherit;cursor:pointer}
   display:flex;align-items:flex-end;gap:2px;padding:6px 8px 4px;overflow:hidden}
 .sign{position:absolute;left:6px;bottom:8px;font-family:var(--display);font-size:13px;color:#fff;background:#2f7fe8;
   padding:2px 8px;border-radius:6px;z-index:2}
-.line{display:flex;flex-wrap:wrap-reverse;align-items:flex-end;align-content:flex-start;gap:4px;margin-left:46px;flex:1;min-width:0;max-height:108px;overflow:hidden}
-.pax{flex:0 0 auto;width:21px;height:32px;transition:transform .2s}
+.line{display:flex;flex-wrap:wrap-reverse;align-items:flex-end;align-content:flex-start;gap:0;margin-left:46px;flex:1;min-width:0;max-height:108px;overflow:hidden}
+.pax{flex:0 0 auto;width:13px;height:21px;margin-right:-1px;margin-top:-4px;transition:transform .2s}
 .run{display:inline-flex;align-items:flex-end;gap:0;padding:2px 4px 2px 2px;border-radius:10px;
   background:color-mix(in srgb, var(--rc) 22%, transparent);border:2px solid color-mix(in srgb, var(--rc) 55%, transparent)}
 .run .pax{width:15px;height:24px;margin-right:-3px}
@@ -67,7 +67,7 @@ button{font:inherit;cursor:pointer}
 .run.first{border-width:3px;border-color:var(--rc)}
 .run.first .pax{width:19px;height:30px}
 .pax svg{width:100%;height:100%;display:block}
-.pax.first{width:28px;height:42px;animation:bob .6s ease-in-out infinite alternate}
+.pax.first{width:19px;height:30px;animation:bob .6s ease-in-out infinite alternate}
 .pax.walkin{animation:walkin .3s ease-out}
 @keyframes bob{to{transform:translateY(-3px)}}
 @keyframes walkin{from{transform:translateX(30px);opacity:.3}}
@@ -1059,23 +1059,12 @@ let lastQueueLen = 0;
 function drawQueue(){
   const q = $('queue'); q.innerHTML='';
   if(!queue.length){ q.innerHTML='<span class="more">모두 탔어요!</span>'; return; }
-  // 같은 색이 이어진 만큼을 한 덩어리로 묶어서 보여 준다
-  const runs = [];
-  for(let i = 0; i < queue.length && runs.length < 13; i++){
-    if(runs.length && runs[runs.length-1].c === queue[i]) runs[runs.length-1].n++;
-    else runs.push({c: queue[i], n: 1});
-  }
-  runs.forEach((r, i) => {
-    const d = document.createElement('span');
-    d.className = 'run' + (i === 0 ? ' first' : '');
-    d.style.setProperty('--rc', C(r.c));
-    const heads = Math.min(r.n, i === 0 ? 4 : 3);
-    d.innerHTML = Array.from({length: heads}, () => `<span class="pax">${personSVG(r.c)}</span>`).join('') + `<b>${r.n}</b>`;
-    d.setAttribute('aria-label', `${NAME[r.c]} 손님 ${r.n}명`);
-    q.appendChild(d);
-  });
-  let shown = runs.reduce((a, r) => a + r.n, 0);
-  if(queue.length > shown){ const m = document.createElement('span'); m.className = 'more'; m.textContent = `+${queue.length - shown}`; q.appendChild(m); }
+  // 원작처럼 숫자 없이 사람들을 촘촘하게 세워서 보여 준다 (맨 앞은 왼쪽 아래)
+  const show = Math.min(queue.length, 84);
+  let html = '';
+  for(let i = 0; i < show; i++) html += `<span class="pax${i===0?' first':''}">${personSVG(queue[i])}</span>`;
+  q.innerHTML = html;
+  q.setAttribute('aria-label', `기다리는 손님 ${queue.length}명, 맨 앞은 ${NAME[queue[0]]}`);
   lastQueueLen = queue.length;
 }
 function drawBays(flags={}){

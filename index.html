@@ -549,6 +549,12 @@ function geoSwept(v, N){
   return o;
 }
 
+// 앞뒤 바꾸기: 대각선 차는 꼬리와 머리 칸도 서로 바뀐다 (차지하는 칸은 그대로)
+function turnAround(v){
+  if(v.diag){ v.c += (v.len-1)*v.dx; v.r += (v.len-1)*v.dy; v.dx = -v.dx; v.dy = -v.dy; }
+  else v.dir = -v.dir;
+}
+
 // Plays the intended order with the game's rules (leftmost bus boards first, 4 bays, no items).
 function solvesCleanly(L, rec){
   const N = L.n, vs = L.vehicles.map(v => ({...v, gone:false}));
@@ -568,6 +574,7 @@ function solvesCleanly(L, rec){
     if(v.timer && removed >= v.timer) return false;   // 구급차가 늦음 (그 전에 다른 차를 timer번 이상 뺌)
     if(rec) rec[v.id] = removed;
     v.gone = true; bays[b] = {v, n:0}; removed++;
+    for(const w of vs) if(w.flip && !w.gone) turnAround(w);   // 다른 차가 빠질 때마다 앞뒤가 바뀐다
     if(v.spotOf){ const next = vs.find(w => w.tunnel === v.spotOf && w.waiting); if(next) next.waiting = false; }
     for(;;){ const i = bays.findIndex(s => s && queue.length && s.v.color===queue[0] && s.n<s.v.cap); if(i<0) break;
       queue.shift(); boarded++; if(++bays[i].n === bays[i].v.cap) bays[i] = null; }
@@ -734,10 +741,15 @@ function makeLevel(k, mode = 'easy'){
       ...(v.diag ? {diag:true, dx:v.dx, dy:v.dy} : {h:v.h, dir:v.dir})}));
     const order = vehicles.slice().reverse();
     if(F.amb){
-      // 구급차는 나중에 빼게: 빠지는 순서의 가운데~뒤쪽(45~75%)에 있는 3칸 차 중에서 고른다
-      const lo = Math.floor(order.length*.45), hi = Math.ceil(order.length*.75);
-      const late = order.slice(lo, hi).filter(v => v.len === 3);
-      const mid = late.length ? late : order.filter(v => v.len === 3);
+      // 구급차: 환자 일부가 줄 앞쪽에 오도록 빠지는 순서의 앞~가운데(15~40%)에 두되,
+      // 처음에는 다른 차에 막혀서 바로 못 꺼내는 차 중에서 고른다
+      const taken = new Map();
+      vehicles.forEach(w => geoBlock(w).forEach(([x,y]) => taken.set(x+','+y, w)));
+      const blocked = v => geoSwept(v, N).some(([x,y]) => { const w = taken.get(x+','+y); return w && w !== v; });
+      const lo = Math.floor(order.length*.15), hi = Math.ceil(order.length*.4);
+      const pick = order.slice(lo, hi).filter(v => v.len === 3 && blocked(v));
+      const anyBlocked = order.filter(v => v.len === 3 && blocked(v));
+      const mid = pick.length ? pick : anyBlocked.length ? anyBlocked : order.filter(v => v.len === 3);
       for(let a = 0; a < F.amb && mid.length; a++){
         const v = mid.splice(Math.floor(R()*mid.length), 1)[0];
         v.color = 'W'; v.cap = 24; v.amb = true;
@@ -745,7 +757,7 @@ function makeLevel(k, mode = 'easy'){
     }
     order.forEach((v,i) => { if(i >= 1 && !v.amb && R() < F.mystery) v.mystery = true; });
     if(F.flip) order.forEach(v => { if(!v.mystery && R() < F.flip) v.flip = true; });
-    const spots = order.map((v,i) => [v,i]).filter(([v,i]) => i >= 2 && !v.mystery && !v.diag);
+    const spots = order.map((v,i) => [v,i]).filter(([v,i]) => i >= 2 && !v.mystery && !v.diag && !v.amb);
     for(let c = 0; c < F.covers && spots.length; c++){
       const [v,i] = spots.splice(Math.floor(R()*spots.length), 1)[0];
       v.cover = Math.min(i, 2 + Math.floor(R()*4));
@@ -755,7 +767,7 @@ function makeLevel(k, mode = 'easy'){
     if(F.tunnels){
       const rays = new Set();
       for(const v of vehicles) geoSwept(v, N).forEach(([x,y]) => rays.add(x+','+y));
-      let cands = order.filter(v => !v.cover && !v.diag).map(v => [v, v.h ? (v.dir>0 ? v.c-1 : v.c+v.len) : v.c, v.h ? v.r : (v.dir>0 ? v.r-1 : v.r+v.len)])
+      let cands = order.filter(v => !v.cover && !v.diag && !v.amb).map(v => [v, v.h ? (v.dir>0 ? v.c-1 : v.c+v.len) : v.c, v.h ? v.r : (v.dir>0 ? v.r-1 : v.r+v.len)])
         .filter(([v,x,y]) => inb(x,y) && grid[y][x] < 0 && !rays.has(x+','+y));
       for(let t = 0; t < F.tunnels && cands.length; t++){
         const [v,x,y] = cands.splice(Math.floor(R()*cands.length), 1)[0];
@@ -768,12 +780,14 @@ function makeLevel(k, mode = 'easy'){
         tunnels.push({id:tid, c:x, r:y, h:v.h, dir:v.dir});
       }
     }
+    // 방향 바뀌는 차: 바르게 풀 때 빠지는 차례까지 몇 번 바뀌는지 세서, 그때 맞는 방향이 되도록 처음 방향을 정한다
+    removalOrder(vehicles).forEach((v,i) => { if(v.flip && i % 2 === 1) turnAround(v); });
     const queue = buildQueue(removalOrder(vehicles), P.group, R);
     const level = {n:N, vehicles, queue, tunnels};
     const rec = {};
     if(!solvesCleanly(level, rec)) continue;
-    // 구급차 제한: 다른 차를 몇 번 빼기 전에 보내야 하는지. 바르게 풀 때 그 전에 빼는 차 수 + 여유(15%, 적어도 3)
-    for(const v of vehicles) if(v.amb) v.timer = rec[v.id] + Math.max(3, Math.ceil(rec[v.id]*.15));
+    // 구급차 제한: 다른 차를 몇 번 빼기 전에 보내야 하는지. 바르게 풀 때 그 전에 빼는 차 수 + 여유(30%, 적어도 4)
+    for(const v of vehicles) if(v.amb) v.timer = rec[v.id] + Math.max(4, Math.ceil(rec[v.id]*.3));
     if(solvesCleanly(level)) return level;
   }
   }
@@ -808,8 +822,18 @@ function vehicleSVG(color, len, h, dir, cap, stretch, noBadge){
       <rect x="4" y="12" width="${L-8}" height="76" rx="16" fill="url(#shade)"/>
       ${wins.join('')}
       <rect x="34" y="34" width="${L-120}" height="32" rx="8" fill="#fff" opacity=".22"/>
+      ${cap === 24 && color !== 'W' ? `<rect x="8" y="44" width="${L-16}" height="12" fill="#000" opacity=".16"/><rect x="${L/2-70}" y="30" width="60" height="40" rx="8" fill="#e9edf2" opacity=".85"/><rect x="${L/2-62}" y="38" width="44" height="24" rx="4" fill="#9aa4b4" opacity=".7"/>` : ''}
       <path d="M${L-52} 16 h24 q20 0 20 20 v28 q0 20 -20 20 h-24 z" fill="#1c3a52"/>
       <path d="M${L-50} 20 h20 q14 0 14 16 v8 z" fill="#fff" opacity=".25"/>`;
+  } else if(cap === 8){
+    const side = [64, 96, 128].map(x => `<rect x="${x}" y="15" width="26" height="9" rx="3" fill="#bfe3ff" opacity=".9"/><rect x="${x}" y="76" width="26" height="9" rx="3" fill="#bfe3ff" opacity=".9"/>`).join('');
+    top = `
+      <rect x="6" y="12" width="${L-12}" height="76" rx="12" fill="${C(color)}"/>
+      <rect x="6" y="12" width="${L-12}" height="76" rx="12" fill="url(#shade)"/>
+      <path d="M36 22 h20 v56 h-20 q-8 0 -8 -8 v-40 q0 -8 8 -8z" fill="#1c3a52"/>
+      <rect x="56" y="24" width="112" height="52" rx="7" fill="#fff" opacity=".16"/>
+      ${side}
+      <path d="M168 20 h10 q14 0 14 14 v32 q0 14 -14 14 h-10 z" fill="#1c3a52"/>`;
   } else {
     top = `
       <rect x="6" y="12" width="${L-12}" height="76" rx="22" fill="${C(color)}"/>
@@ -822,20 +846,21 @@ function vehicleSVG(color, len, h, dir, cap, stretch, noBadge){
   }
   const lights = `<rect x="${L-14}" y="18" width="8" height="16" rx="3" fill="#fff6c2"/><rect x="${L-14}" y="66" width="8" height="16" rx="3" fill="#fff6c2"/>
     <rect x="6" y="20" width="6" height="12" rx="2" fill="#ff5a5a"/><rect x="6" y="68" width="6" height="12" rx="2" fill="#ff5a5a"/>`;
-  const ax = bus ? L-96 : 166;
   const amb = color === 'W';
   // ambulance: red stripe, red cross on the roof, blue-red light bar behind the windshield
   const ambDeco = !amb ? '' : `<rect x="8" y="80" width="${L-16}" height="6" fill="#e5484d"/><rect x="8" y="14" width="${L-16}" height="6" fill="#e5484d"/>
     <path d="M36 36 h10 v9 h9 v10 h-9 v9 h-10 v-9 h-9 v-10 h9z" fill="#e5484d"/>
     <rect x="${L-70}" y="22" width="10" height="27" rx="3" fill="#2f7fe8"/><rect x="${L-70}" y="51" width="10" height="27" rx="3" fill="#e5484d"/>`;
-  const arrow = `<path d="M${ax} 38 l16 12 l-16 12" fill="none" stroke="${amb ? '#e5484d' : '#fff'}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/>`;
+  // 원작처럼 지붕을 가로지르는 큰 흰 화살표
+  const a0 = L*.24, a1 = L - (bus ? 70 : 52);
+  const arrow = `<path d="M${a0} 50 H${a1} M${a1-20} 30 L${a1} 50 L${a1-20} 70" fill="none" stroke="${amb ? '#e5484d' : '#fff'}" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" opacity=".97"/>`;
   // seat count badge, drawn upright whatever way the vehicle faces
   const bx = bus ? L/2-20 : 103, by = 50;
   const [px,py] = !t ? [bx,by] : (h ? [L-bx, W-by] : dir>0 ? [W-by, bx] : [by, L-bx]);
   const badge = `<circle cx="${px}" cy="${py}" r="32" fill="#fff" opacity=".95"/><text x="${px}" y="${py+12}" font-size="${cap>=10?32:38}" font-weight="700" text-anchor="middle" fill="#1d2430" font-family="sans-serif">${cap}</text>`;
   return `<svg viewBox="${vb}"${stretch ? ' preserveAspectRatio="none"' : ''} aria-hidden="true"><defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#fff" stop-opacity=".25"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".22"/></linearGradient></defs>
-    <g transform="${t}">${wheels}${top}${ambDeco}${lights}${arrow}</g>${stretch || noBadge ? '' : badge}</svg>`;
+    <g transform="${t}">${wheels}${top}${ambDeco}${lights}${cap === '?' ? '' : arrow}</g>${stretch || noBadge || cap !== '?' ? '' : badge}</svg>`;
 }
 function personSVG(color){
   return `<svg viewBox="0 0 26 40" aria-hidden="true">
@@ -1065,8 +1090,8 @@ function drawBoard(flash){
     const timed = v.amb && v.timeLeft > 0;
     if(v.diag){
       const px = $('board').clientWidth/N, d = diagBox(v);
-      el.innerHTML = vehicleSVG(hidden ? 'X' : v.color, v.len, true, 1, 0, true)
-        + (timed ? '' : `<span class="dbadge" style="width:${px*.5}px;height:${px*.5}px;font-size:${px*.3}px;transform:translate(-50%,-50%) rotate(${-d.ang}deg)">${hidden ? '?' : v.cap}</span>`);
+      el.innerHTML = vehicleSVG(hidden ? 'X' : v.color, v.len, true, 1, v.cap, true)
+        + (timed || !hidden ? '' : `<span class="dbadge" style="width:${px*.5}px;height:${px*.5}px;font-size:${px*.3}px;transform:translate(-50%,-50%) rotate(${-d.ang}deg)">?</span>`);
       if(timed) el.insertAdjacentHTML('beforeend', `<span class="timer" id="tm-${v.id}" style="transform:translate(-50%,-50%) rotate(${-d.ang}deg)">${v.timeLeft}</span>`);
     } else {
       el.innerHTML = vehicleSVG(hidden ? 'X' : v.color, v.len, v.h, v.dir, hidden ? '?' : v.cap, false, timed);
@@ -1147,14 +1172,6 @@ function tap(v, el){
     return;
   }
   const blk = blockerOf(v);
-  // a turn-around car that is blocked spins to face the other way instead of honking
-  if(blk && v.flip){
-    if(v.diag){ v.c += (v.len-1)*v.dx; v.r += (v.len-1)*v.dy; v.dx = -v.dx; v.dy = -v.dy; }
-    else v.dir = -v.dir;
-    sfx.board(3); buzz(10);
-    revealFree(); drawBoard(new Map([[v, 'turned']])); drawItems();
-    return;
-  }
   if(blk || free<0){
     mistakes++; sfx.honk(); buzz(40);
     el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
@@ -1193,6 +1210,7 @@ function afterLeave(left){
   const flash = new Map();
   let opened = false, spawned = false;
   for(const v of vehicles) if(!v.gone && v.cover > 0){ v.cover--; if(v.cover === 0){ flash.set(v, 'opened'); opened = true; } }
+  for(const v of vehicles) if(v.flip && v !== left && !v.gone && !v.waiting){ turnAround(v); flash.set(v, 'turned'); }
   if(left && left.spotOf){
     const next = vehicles.find(w => w.tunnel === left.spotOf && w.waiting);
     if(next){ next.waiting = false; flash.set(next, 'spawn'); spawned = true; }
@@ -1205,7 +1223,7 @@ function afterLeave(left){
 const FEATURE_INFO = {
   mystery: { title: '새로운 차: 물음표 차', text: '색깔이 가려진 까만 차예요. 앞길이 뚫리면 진짜 색깔이 보여요.',
     pic: () => `<div class="sample">${vehicleSVG('X', 2, true, 1, '?')}</div>` },
-  flip: { title: '새로운 차: 방향 바뀌는 차', text: '주황색 동그란 화살표가 붙은 차예요. 앞이 막혔을 때 누르면 앞뒤 방향이 바뀌어요. 앞이 뚫려 있으면 그대로 빠져나가요.',
+  flip: { title: '새로운 차: 방향 바뀌는 차', text: '주황색 동그란 화살표가 붙은 차예요. 다른 차를 뺄 때마다 앞뒤 방향이 바뀌어요. 나가는 쪽이 뚫렸을 때 꺼내세요.',
     pic: () => `<div class="sample" style="width:160px;height:80px;position:relative">${vehicleSVG('G', 2, true, 1, 8)}<span class="flipmark" style="right:0;top:0">⟲</span></div>` },
   amb: { title: '새로운 차: 구급차', text: '환자 손님은 구급차만 태울 수 있어요. 구급차의 빨간 숫자는 다른 차를 뺄 때마다 1씩 줄어요. 0이 되기 전에 구급차를 정류장으로 보내세요!',
     pic: () => `<div class="sample" style="width:180px;height:60px">${vehicleSVG('W', 3, true, 1, 24)}</div>` },

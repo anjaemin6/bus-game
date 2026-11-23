@@ -584,7 +584,7 @@ function solvesCleanly(L, rec){
   const free = v => {
     const taken = new Set();
     for(const w of vs) if(w !== v && !w.gone && !w.waiting) geoBlock(w).forEach(([x,y]) => taken.add(x+','+y));
-    for(const t of L.tunnels || []) taken.add(t.c+','+t.r);   // 터널은 지나갈 수 없다
+    for(const t of L.tunnels || []) if(vs.some(w => w.tunnel === t.id && w.waiting)) taken.add(t.c+','+t.r);   // 차가 남은 터널은 지나갈 수 없다
     return !geoSwept(v, N).some(([x,y]) => taken.has(x+','+y));
   };
   let removed = 0, boarded = 0;
@@ -714,7 +714,7 @@ function greedyWins(L){
       if(v.gone || v.waiting || (v.cover && removed < v.cover)) return false;
       const taken = new Set();
       for(const w of vs) if(w !== v && !w.gone && !w.waiting) geoBlock(w).forEach(([x,y]) => taken.add(x+','+y));
-      for(const t of L.tunnels || []) taken.add(t.c+','+t.r);
+      for(const t of L.tunnels || []) if(vs.some(w => w.tunnel === t.id && w.waiting)) taken.add(t.c+','+t.r);
       return !geoSwept(v, N).some(([x,y]) => taken.has(x+','+y));
     });
     if(!free.length) return false;
@@ -1111,8 +1111,8 @@ $('it-slot').onclick = ()=>{
   sfx.board(4); drawBays({opened:bays.length-1}); drawItems(); toast('자리 +1'); kick();
 };
 function occupant(x,y,except){
-  const t = tunnels.find(t => t.c===x && t.r===y);
-  if(t) return {id:'tunnel-'+t.id};   // 터널은 지나갈 수 없다
+  const t = tunnels.find(t => t.c===x && t.r===y && vehicles.some(w => w.tunnel === t.id && w.waiting));
+  if(t) return {id:'tunnel-'+t.id};   // 차가 남은 터널은 지나갈 수 없다
   return vehicles.find(w=>w!==except && !w.gone && !w.waiting && geoBlock(w).some(([a,b])=>a===x&&b===y));
 }
 function blockerOf(v){
@@ -1125,7 +1125,7 @@ function jitterOf(v){
   let h = 2166136261;
   for(const ch of v.id + ':' + levelNo + diff) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
   const r = i => (((h >>> (i*8)) & 255) / 255) * 2 - 1;
-  return { along: r(0) * .10, side: r(1) * .07, tilt: r(2) * 3 };
+  return { along: r(0) * .08, side: r(1) * .05, tilt: 0 };   // 각도는 15도 단위만 쓰므로 작은 기울기는 없음
 }
 function diagBox(v){
   const fx = v.c+(v.len-1)*v.dx, fy = v.r+(v.len-1)*v.dy;
@@ -1154,6 +1154,7 @@ function drawBoard(flash){
   const b = $('board'); b.querySelectorAll('.veh,.tunnel').forEach(e=>e.remove());
   for(const t of tunnels){
     const left = vehicles.filter(w => w.tunnel === t.id && w.waiting).length;
+    if(!left) continue;   // 더 나올 차가 없으면 터널 그림은 사라진다
     const el = document.createElement('div');
     el.className = 'tunnel' + (left ? '' : ' empty'); el.style.padding = (7/N)+'%';
     el.style.left = t.c/N*100+'%'; el.style.top = t.r/N*100+'%'; el.style.width = el.style.height = 100/N+'%';

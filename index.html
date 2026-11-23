@@ -16,7 +16,7 @@
 :root{
   --bg:#dfe9f2; --fg:#1d2430; --muted:#5a6577; --panel:#ffffff; --line:#c9d3df;
   --asphalt:#3b4250; --asphalt2:#353b48; --stall:#e9edf2; --curb:#f2c94c; --walk:#cfd6de; --walk2:#c3cbd5;
-  --c-R:#e5484d; --c-B:#2f7fe8; --c-Y:#f0a800; --c-G:#1fa36a; --c-P:#8b5cf6; --c-K:#ec4f9c; --c-X:#2a2e36; --c-W:#f3f5f8;
+  --c-R:#e5484d; --c-B:#2f7fe8; --c-Y:#f0a800; --c-G:#1fa36a; --c-P:#8b5cf6; --c-K:#ec4f9c; --c-X:#2a2e36; --c-W:#f3f5f8; --c-N:#8a5a33;
   --accent:#ff7a1a; --skin:#f3c9a0;
   --display:"Jua","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
   --body:"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
@@ -109,6 +109,10 @@ button{font:inherit;cursor:pointer}
 .veh.shake svg{animation:shake .35s}
 .veh.blocker svg{animation:flash .5s}
 .veh.going{z-index:3}
+.timer{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#e5484d;color:#fff;border:2px solid #fff;border-radius:99px;
+  padding:1px 7px;font-family:var(--display);font-size:16px;line-height:1.2;box-shadow:0 2px 0 rgba(0,0,0,.3);pointer-events:none;z-index:2;white-space:nowrap}
+.timer.hurry{animation:hurry .45s infinite alternate}
+@keyframes hurry{to{background:#ffb300;color:#5a3a00}}
 .flipmark{position:absolute;right:-4px;top:-4px;width:22px;height:22px;border-radius:50%;background:#ff7a1a;color:#fff;display:grid;place-items:center;
   font-size:15px;line-height:1;font-weight:700;box-shadow:0 2px 0 rgba(0,0,0,.3);pointer-events:none;z-index:2}
 .veh.turned svg{animation:turned .4s}
@@ -346,8 +350,8 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
 <script>
 let N = 6; const START_BAYS = 5, MAX_BAYS = 8;   // 0번은 VIP 칸
 let items, mode = null, used = 0, rescued = false;
-const SYM = {R:'●', B:'■', Y:'▲', G:'◆', P:'★', K:'♥', X:'?', W:'✚'};
-const NAME = {R:'빨강', B:'파랑', Y:'노랑', G:'초록', P:'보라', K:'분홍', X:'물음표', W:'구급차'};
+const SYM = {R:'●', B:'■', Y:'▲', G:'◆', P:'★', K:'♥', X:'?', W:'✚', N:'▼'};
+const NAME = {R:'빨강', B:'파랑', Y:'노랑', G:'초록', P:'보라', K:'분홍', X:'물음표', W:'구급차', N:'갈색'};
 // 시험하는 동안 모든 단계를 열어 둔다 (정식으로 낼 때 false로)
 const ALL_OPEN = true;
 let diff = 'easy', levelNo = 1, current;
@@ -450,7 +454,7 @@ function saveProgress(){ try{ localStorage.setItem('bus-progress', JSON.stringif
 /* Level data. Level 1 is hand-made; the rest are generated so that a clean solution always exists:
    each new vehicle's exit path avoids every vehicle placed before it, so removing them in reverse
    placement order always works, and passengers are only mixed within small groups of that order. */
-const COLORSET = ['R','B','Y','G','P','K'];
+const COLORSET = ['R','B','Y','G','P','K','N'];   // N = 갈색
 const LEVEL_PARAMS = [null, null,
   {n:6, count:9,  colors:4, group:2, bus:.30},
   {n:6, count:10, colors:4, group:2, bus:.35},
@@ -481,10 +485,10 @@ function levelParams(k, hard){
   const i = k - 11;
   if(hard){
     const n = Math.min(10, 8 + Math.floor(i/6));
-    return {n, count: Math.round(n*n*.30) + Math.floor((i%6)/2), colors:6, group:4, bus:.55};
+    return {n, count: Math.round(n*n*.30) + Math.floor((i%6)/2), colors:7, group:4, bus:.55};
   }
   const n = Math.min(10, 8 + Math.floor(i/7));
-  return {n, count: Math.round(n*n*.26) + Math.floor((i%7)/2), colors:6, group:3, bus:.50};
+  return {n, count: Math.round(n*n*.26) + Math.floor((i%7)/2), colors: k>=15 ? 7 : 6, group:3, bus:.50};
 }
 // seats: small (2 spaces) 4 or 8, medium (3) 16 or 24, large (4) 40
 function pickCap(len, R, k, hard){
@@ -546,7 +550,7 @@ function geoSwept(v, N){
 }
 
 // Plays the intended order with the game's rules (leftmost bus boards first, 4 bays, no items).
-function solvesCleanly(L){
+function solvesCleanly(L, rec){
   const N = L.n, vs = L.vehicles.map(v => ({...v, gone:false}));
   const byId = new Map(vs.map(v => [v.id, v]));
   const queue = L.queue.slice(), bays = [null,null,null,null];
@@ -555,16 +559,18 @@ function solvesCleanly(L){
     for(const w of vs) if(w !== v && !w.gone && !w.waiting) geoBlock(w).forEach(([x,y]) => taken.add(x+','+y));
     return !geoSwept(v, N).some(([x,y]) => taken.has(x+','+y));
   };
-  let removed = 0;
+  let removed = 0, boarded = 0;
   for(const o of removalOrder(L.vehicles)){
     const v = byId.get(o.id), b = bays.indexOf(null);
     if(v.waiting) return false;
     if(!free(v) || b < 0) return false;
     if(v.cover && removed < v.cover) return false;   // garage still closed
+    if(v.timer && removed >= v.timer) return false;   // 구급차가 늦음 (그 전에 다른 차를 timer번 이상 뺌)
+    if(rec) rec[v.id] = removed;
     v.gone = true; bays[b] = {v, n:0}; removed++;
     if(v.spotOf){ const next = vs.find(w => w.tunnel === v.spotOf && w.waiting); if(next) next.waiting = false; }
     for(;;){ const i = bays.findIndex(s => s && queue.length && s.v.color===queue[0] && s.n<s.v.cap); if(i<0) break;
-      queue.shift(); if(++bays[i].n === bays[i].v.cap) bays[i] = null; }
+      queue.shift(); boarded++; if(++bays[i].n === bays[i].v.cap) bays[i] = null; }
   }
   return !queue.length && bays.every(s => !s);
 }
@@ -601,15 +607,24 @@ function denseSize(k, hard){
 }
 function packBoard(N, fill, R, wantLen){
   const grid = Array.from({length:N}, () => Array(N).fill(-1));
+  // 원작처럼 차들이 몇 무더기로 나뉘게, 큰 판에는 가로·세로 빈 통로를 하나씩 낸다
+  const hole = Array.from({length:N}, () => Array(N).fill(false));
+  if(N >= 8){
+    const row = Math.floor(N/3 + R()*N/3), col = Math.floor(N/3 + R()*N/3);
+    const rs = Math.floor(R()*N/3), re = N - Math.floor(R()*N/4);
+    const cs = Math.floor(R()*N/4), ce = N - Math.floor(R()*N/3);
+    for(let x = rs; x < re; x++) hole[row][x] = true;
+    for(let y = cs; y < ce; y++) hole[y][col] = true;
+  }
   const cells = [];
   for(let y = 0; y < N; y++) for(let x = 0; x < N; x++) cells.push([x,y]);
   for(let i = cells.length-1; i > 0; i--){ const j = Math.floor(R()*(i+1)); [cells[i],cells[j]] = [cells[j],cells[i]]; }
   const vs = [], target = Math.round(N*N*fill);
   let filled = 0;
-  const fits = q => geoBody(q).every(([a,b]) => a>=0 && b>=0 && a<N && b<N && grid[b][a] < 0);
+  const fits = q => geoBody(q).every(([a,b]) => a>=0 && b>=0 && a<N && b<N && grid[b][a] < 0 && !hole[b][a]);
   for(const [x,y] of cells){
     if(filled >= target) break;
-    if(grid[y][x] >= 0) continue;
+    if(grid[y][x] >= 0 || hole[y][x]) continue;
     const first = wantLen(), lens = [...new Set([first, 3, 2])];
     const dirs = R() < .5 ? [true,false] : [false,true];
     let placed = null;
@@ -719,7 +734,10 @@ function makeLevel(k, mode = 'easy'){
       ...(v.diag ? {diag:true, dx:v.dx, dy:v.dy} : {h:v.h, dir:v.dir})}));
     const order = vehicles.slice().reverse();
     if(F.amb){
-      const mid = order.filter(v => v.len === 3);
+      // 구급차는 나중에 빼게: 빠지는 순서의 가운데~뒤쪽(45~75%)에 있는 3칸 차 중에서 고른다
+      const lo = Math.floor(order.length*.45), hi = Math.ceil(order.length*.75);
+      const late = order.slice(lo, hi).filter(v => v.len === 3);
+      const mid = late.length ? late : order.filter(v => v.len === 3);
       for(let a = 0; a < F.amb && mid.length; a++){
         const v = mid.splice(Math.floor(R()*mid.length), 1)[0];
         v.color = 'W'; v.cap = 24; v.amb = true;
@@ -752,13 +770,17 @@ function makeLevel(k, mode = 'easy'){
     }
     const queue = buildQueue(removalOrder(vehicles), P.group, R);
     const level = {n:N, vehicles, queue, tunnels};
+    const rec = {};
+    if(!solvesCleanly(level, rec)) continue;
+    // 구급차 제한: 다른 차를 몇 번 빼기 전에 보내야 하는지. 바르게 풀 때 그 전에 빼는 차 수 + 여유(15%, 적어도 3)
+    for(const v of vehicles) if(v.amb) v.timer = rec[v.id] + Math.max(3, Math.ceil(rec[v.id]*.15));
     if(solvesCleanly(level)) return level;
   }
   }
   return null;
 }
 
-let tunnels = [];
+let tunnels = [], lostAmb = false;
 let vehicles, bays, queue, mistakes, busy, over, ticking, startAt, soundOn = true;
 try{ soundOn = localStorage.getItem('bus-sound') !== 'off'; }catch(e){}
 const $ = id => document.getElementById(id);
@@ -766,7 +788,7 @@ const C = c => `var(--c-${c})`;
 const KIND = {4:'승용차', 8:'승합차', 16:'미니버스', 24:'버스', 40:'큰 버스'};
 
 /* ---------- drawings ---------- */
-function vehicleSVG(color, len, h, dir, cap, stretch){
+function vehicleSVG(color, len, h, dir, cap, stretch, noBadge){
   const L = len*100, W = 100;
   const bus = len >= 3;
   // drawn facing +x in a L×W box, then rotated into place
@@ -813,7 +835,7 @@ function vehicleSVG(color, len, h, dir, cap, stretch){
   const badge = `<circle cx="${px}" cy="${py}" r="32" fill="#fff" opacity=".95"/><text x="${px}" y="${py+12}" font-size="${cap>=10?32:38}" font-weight="700" text-anchor="middle" fill="#1d2430" font-family="sans-serif">${cap}</text>`;
   return `<svg viewBox="${vb}"${stretch ? ' preserveAspectRatio="none"' : ''} aria-hidden="true"><defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#fff" stop-opacity=".25"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".22"/></linearGradient></defs>
-    <g transform="${t}">${wheels}${top}${ambDeco}${lights}${arrow}</g>${stretch ? '' : badge}</svg>`;
+    <g transform="${t}">${wheels}${top}${ambDeco}${lights}${arrow}</g>${stretch || noBadge ? '' : badge}</svg>`;
 }
 function personSVG(color){
   return `<svg viewBox="0 0 26 40" aria-hidden="true">
@@ -854,7 +876,8 @@ function buzz(ms){ try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){} 
 function init(){
   current = makeLevel(levelNo, diff); N = current.n;
   $('board').style.setProperty('--n', N);
-  vehicles = current.vehicles.map(v => ({...v, cap:v.cap, cover:v.cover||0, revealed:!v.mystery, waiting:!!v.waiting, gone:false}));
+  vehicles = current.vehicles.map(v => ({...v, cap:v.cap, cover:v.cover||0, revealed:!v.mystery, waiting:!!v.waiting, timeLeft:v.timer||0, gone:false}));
+  lostAmb = false;
   tunnels = current.tunnels || [];
   revealFree();
   bays = Array(START_BAYS).fill(null);
@@ -1039,11 +1062,18 @@ function drawBoard(flash){
     }
     const hidden = v.mystery && !v.revealed;
     el.setAttribute('aria-label', hidden ? `물음표 ${KIND[v.cap]}, ${way}으로 나감` : v.amb ? `구급차(${v.cap}명), ${way}으로 나감` : `${NAME[v.color]} ${KIND[v.cap]}(${v.cap}명), ${way}으로 나감`);
+    const timed = v.amb && v.timeLeft > 0;
     if(v.diag){
       const px = $('board').clientWidth/N, d = diagBox(v);
       el.innerHTML = vehicleSVG(hidden ? 'X' : v.color, v.len, true, 1, 0, true)
-        + `<span class="dbadge" style="width:${px*.5}px;height:${px*.5}px;font-size:${px*.3}px;transform:translate(-50%,-50%) rotate(${-d.ang}deg)">${hidden ? '?' : v.cap}</span>`;
-    } else el.innerHTML = vehicleSVG(hidden ? 'X' : v.color, v.len, v.h, v.dir, hidden ? '?' : v.cap);
+        + (timed ? '' : `<span class="dbadge" style="width:${px*.5}px;height:${px*.5}px;font-size:${px*.3}px;transform:translate(-50%,-50%) rotate(${-d.ang}deg)">${hidden ? '?' : v.cap}</span>`);
+      if(timed) el.insertAdjacentHTML('beforeend', `<span class="timer" id="tm-${v.id}" style="transform:translate(-50%,-50%) rotate(${-d.ang}deg)">${v.timeLeft}</span>`);
+    } else {
+      el.innerHTML = vehicleSVG(hidden ? 'X' : v.color, v.len, v.h, v.dir, hidden ? '?' : v.cap, false, timed);
+      if(timed) el.insertAdjacentHTML('beforeend', `<span class="timer" id="tm-${v.id}">${v.timeLeft}</span>`);
+    }
+    if(timed && v.timeLeft <= 10) el.querySelector('.timer').classList.add('hurry');
+    if(timed) el.setAttribute('aria-label', el.getAttribute('aria-label') + `, 다른 차를 ${v.timeLeft}번 빼기 전에 정류장으로`);
     {
       const j = jitterOf(v), px = $('board').clientWidth/N;
       const [ax, ay] = v.diag ? [.7071, .7071] : v.h ? [1, 0] : [0, 1];
@@ -1158,6 +1188,8 @@ function revealFree(){
   return shown;
 }
 function afterLeave(left){
+  if(left && !left.amb) tickAmb(1);   // 다른 차가 빠질 때마다 구급차 숫자가 1씩 준다
+  if(over) return;
   const flash = new Map();
   let opened = false, spawned = false;
   for(const v of vehicles) if(!v.gone && v.cover > 0){ v.cover--; if(v.cover === 0){ flash.set(v, 'opened'); opened = true; } }
@@ -1175,7 +1207,7 @@ const FEATURE_INFO = {
     pic: () => `<div class="sample">${vehicleSVG('X', 2, true, 1, '?')}</div>` },
   flip: { title: '새로운 차: 방향 바뀌는 차', text: '주황색 동그란 화살표가 붙은 차예요. 앞이 막혔을 때 누르면 앞뒤 방향이 바뀌어요. 앞이 뚫려 있으면 그대로 빠져나가요.',
     pic: () => `<div class="sample" style="width:160px;height:80px;position:relative">${vehicleSVG('G', 2, true, 1, 8)}<span class="flipmark" style="right:0;top:0">⟲</span></div>` },
-  amb: { title: '새로운 차: 구급차', text: '하얀 옷에 빨간 십자가를 단 환자 손님은 구급차만 태울 수 있어요. 구급차는 24명이 타요.',
+  amb: { title: '새로운 차: 구급차', text: '환자 손님은 구급차만 태울 수 있어요. 구급차의 빨간 숫자는 다른 차를 뺄 때마다 1씩 줄어요. 0이 되기 전에 구급차를 정류장으로 보내세요!',
     pic: () => `<div class="sample" style="width:180px;height:60px">${vehicleSVG('W', 3, true, 1, 24)}</div>` },
   diag: { title: '새로운 차: 대각선 차', text: '비스듬히 선 차예요. 화살표 쪽 대각선으로 빠져나가요. 모서리끼리 붙은 두 차 사이로는 못 지나가요.',
     pic: () => `<div class="sample" style="width:150px;transform:rotate(-35deg)">${vehicleSVG('B', 2, true, 1, 8)}</div>` },
@@ -1206,6 +1238,17 @@ function nextIntro(){
 }
 $('inBtn').onclick = nextIntro;
 
+// 주차장에 남은 구급차의 제한 숫자를 줄이고, 0이 되면 진다
+function tickAmb(n){
+  if(over || !n) return;
+  for(const v of vehicles){
+    if(!v.amb || v.gone || v.waiting || !(v.timeLeft > 0)) continue;
+    v.timeLeft = Math.max(0, v.timeLeft - n);
+    const t = document.getElementById('tm-' + v.id);
+    if(t){ t.textContent = v.timeLeft; if(v.timeLeft <= 10) t.classList.add('hurry'); }
+    if(v.timeLeft === 0){ lostAmb = true; finish(false); return; }
+  }
+}
 function kick(){ if(!ticking){ ticking = true; setTimeout(step, queue.length > 300 ? 40 : 70); } }
 function step(){
   ticking = false; if(over) return;
@@ -1249,13 +1292,14 @@ function finish(win){
   mode = null; drawItems();
   $('stars').hidden = !win;
   $('stars').innerHTML = [1,2,3].map(k=>`<span class="${win&&k<=stars?'on':''}">★</span>`).join('');
-  $('ovTitle').textContent = win ? '모두 출발했어요!' : '정류장이 꽉 찼어요';
+  $('ovTitle').textContent = win ? '모두 출발했어요!' : lostAmb ? '구급차가 늦었어요' : '정류장이 꽉 찼어요';
   $('ovText').textContent = win
     ? `${secs}초 만에 손님 ${current.queue.length}명을 다 태웠어요.` + (mistakes ? ` 막힌 차를 ${mistakes}번 눌렀어요.` : ' 한 번도 안 막혔어요!') + (used ? ` 아이템 ${used}개 사용.` : '')
+    : lostAmb ? '구급차가 늦었어요! 다른 차를 빼다 보면 구급차 숫자가 줄어요. 0이 되기 전에 구급차를 정류장으로 보내야 해요.'
     : `맨 앞 ${NAME[queue[0]]} 손님이 탈 차가 없어요.` + (rescued ? ' 차 빼는 순서를 바꿔서 다시 해 보세요.' : ' 정류장 자리를 하나 더 받아서 이어 할 수 있어요.');
   const last = levelNo >= LEVEL_COUNT;
   $('ovRetry').hidden = !win;
-  $('ovRescue').hidden = win || rescued;
+  $('ovRescue').hidden = win || rescued || lostAmb;
   $('ovBtn').textContent = !win ? '다시 하기' : last ? '단계 고르기' : '다음 단계';
   if(win){
     const pr = progress[diff];

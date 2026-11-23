@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="출발 정류장">
-<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}</style>
+<style>:root{padding:0}body{margin:0}</style>
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#dfe9f2">
 </head>
 <body>
 <title>출발 정류장</title>
@@ -31,10 +33,10 @@ html,body{height:100%}
 [hidden]{display:none!important}
 body{background:var(--bg);color:var(--fg);font-family:var(--body);
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
-  padding-block:8px 10px;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  padding-top:calc(env(safe-area-inset-top,0px) + 14px);padding-bottom:calc(env(safe-area-inset-bottom,0px) + 18px);-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
 html,body{box-sizing:border-box}
 *{touch-action:manipulation}
-body{overflow:hidden}
+body{overflow:hidden;height:100vh;height:100dvh}
 .wrap{max-width:520px;height:100%;margin:0 auto;display:flex;flex-direction:column;gap:6px}
 .boardwrap{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center}
 .btn .dot{display:inline-grid;place-items:center;min-width:20px;height:20px;border-radius:99px;background:#e5484d;color:#fff;font-size:12px;padding:0 5px;margin-left:4px;vertical-align:1px}

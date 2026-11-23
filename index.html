@@ -198,7 +198,7 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
         <path d="M6 13 L14 4 h4" stroke="#5a6577" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M18 4 v5 a2 2 0 0 1 -3 1" stroke="#5a6577" stroke-width="2.5" fill="none" stroke-linecap="round"/>
         <circle cx="8" cy="25" r="3.5" fill="#1b1e24"/><circle cx="23" cy="25" r="3.5" fill="#1b1e24"/></svg>
       견인차<span class="badge" id="n-tow">1</span></button>
-    <button class="item" id="it-shuffle" aria-label="섞기: 기다리는 손님 줄 섞기">
+    <button class="item" id="it-shuffle" aria-label="섞기: 주차장 차 색깔 섞기">
       <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 9 h6 c6 0 8 14 14 14 h4 M24 19 l4 4 l-4 4 M4 23 h6 c2 0 3.5 -1.5 4.5 -3.5 M18 11.5 c1 -1.5 3 -2.5 6 -2.5 h4 M24 5 l4 4 l-4 4" stroke="#8b5cf6" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
       섞기<span class="badge" id="n-shuffle">2</span></button>
     <button class="item" id="it-fill" aria-label="채우기: 정류장 버스 하나를 바로 꽉 채워 출발">
@@ -504,7 +504,12 @@ function init(){
 }
 
 /* ---------- items ---------- */
-function canShuffle(){ return new Set(queue).size > 1; }
+// cars still in the lot whose color can be shuffled (garages stay shut, hidden cars keep their secret)
+function shufflePool(){ return vehicles.filter(v => !v.gone && !v.cover); }
+function canShuffle(){
+  const pool = shufflePool();
+  return [...new Set(pool.map(v=>v.cap))].some(c => new Set(pool.filter(v=>v.cap===c).map(v=>v.color)).size > 1);
+}
 function drawItems(){
   for(const k of ['tow','shuffle','fill','slot']){
     $('n-'+k).textContent = items[k];
@@ -527,14 +532,20 @@ $('it-tow').onclick = ()=>{
   if(bays.indexOf(null) < 0){ toast('정류장 자리가 없어요'); sfx.honk(); return; }
   mode = 'tow'; sfx.board(1); drawItems();
 };
-// shuffle the passengers waiting in line
+// shuffle car colors in the lot, only between cars with the same seat count,
+// so seats per color still match the passengers waiting
 $('it-shuffle').onclick = ()=>{
   if(over || busy || items.shuffle <= 0 || !canShuffle()) return;
   items.shuffle--; used++; mode = null; drawBays();
-  for(let i=queue.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [queue[i],queue[j]]=[queue[j],queue[i]]; }
-  sfx.board(2); sfx.board(5); lastQueueLen = queue.length; drawQueue();
-  $('queue').querySelectorAll('.pax').forEach(e=>e.classList.add('walkin'));
-  toast('손님 섞기!'); drawItems(); kick();
+  const pool = shufflePool();
+  for(const c of new Set(pool.map(v=>v.cap))){
+    const group = pool.filter(v=>v.cap===c), cols = group.map(v=>v.color);
+    for(let i=cols.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [cols[i],cols[j]]=[cols[j],cols[i]]; }
+    group.forEach((v,i)=>v.color=cols[i]);
+  }
+  sfx.board(2); sfx.board(5); drawBoard();
+  $('board').querySelectorAll('.veh:not(.covered)').forEach(e=>e.classList.add('spin'));
+  toast('차 섞기!'); drawItems();
 };
 $('it-fill').onclick = ()=>{
   if(over) return;

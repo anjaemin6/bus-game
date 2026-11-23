@@ -355,8 +355,8 @@ let N = 6; const START_BAYS = 5, MAX_BAYS = 8;   // 0번은 VIP 칸
 let items, mode = null, used = 0, rescued = false;
 const SYM = {R:'●', B:'■', Y:'▲', G:'◆', P:'★', K:'♥', X:'?', W:'✚', N:'▼'};
 const NAME = {R:'빨강', B:'파랑', Y:'노랑', G:'초록', P:'보라', K:'분홍', X:'물음표', W:'구급차', N:'갈색'};
-// 시험하는 동안 모든 단계를 열어 둔다 (정식으로 낼 때 false로)
-const ALL_OPEN = true;
+// 시험할 때만 true로 바꾸면 모든 단계가 열린다
+const ALL_OPEN = false;
 let diff = 'easy', levelNo = 1, current;
 let progress = {easy:{unlocked:1, stars:{}}, hard:{unlocked:1, stars:{}}, coins:100, items:{tow:2, shuffle:2, fill:2, slot:2}};
 try{ const p = JSON.parse(localStorage.getItem('bus-progress')||'null'); if(p && p.easy && p.hard) progress = p;

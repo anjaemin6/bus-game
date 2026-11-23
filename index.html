@@ -743,7 +743,7 @@ function blockerOf(v){
 // diagonal car: a rotated box centered between its tail and front cells (units: cells)
 function diagBox(v){
   const fx = v.c+(v.len-1)*v.dx, fy = v.r+(v.len-1)*v.dy;
-  const mx = (v.c+fx)/2+.5, my = (v.r+fy)/2+.5, Lc = (v.len-1)*1.4142+.8, Wc = .62;
+  const mx = (v.c+fx)/2+.5, my = (v.r+fy)/2+.5, Wc = .86, Lc = Wc*v.len;
   return {mx, my, Lc, Wc, ang: Math.atan2(v.dy, v.dx)*180/Math.PI, fx, fy};
 }
 

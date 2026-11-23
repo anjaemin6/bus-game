@@ -109,6 +109,15 @@ button{font:inherit;cursor:pointer}
 .veh.opened .garage{animation:garageOpen .5s forwards}
 @keyframes garageOpen{to{transform:scaleY(0);transform-origin:top;opacity:0}}
 .veh.reveal svg{animation:spin .45s}
+.veh.spawn svg{animation:spawn .45s cubic-bezier(.2,.8,.3,1.2)}
+@keyframes spawn{from{transform:scale(.3);opacity:0}}
+.tunnel{position:absolute;padding:3%;z-index:0}
+.tunnel span{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:12px;
+  background:radial-gradient(circle at 50% 50%,#0d0f13 0 38%,#3a3f49 40% 100%);border:3px solid #6b717c;color:#fff;font-family:var(--display);
+  box-shadow:0 4px 0 rgba(0,0,0,.35)}
+.tunnel b{font-size:20px;font-weight:400;line-height:1}
+.tunnel i{font-style:normal;font-size:18px;line-height:1;opacity:.9}
+.tunnel.empty span{opacity:.45}
 .inpic{display:flex;justify-content:center;align-items:center;height:90px}
 .inpic .sample{position:relative;width:170px;height:80px}
 .inpic svg{width:100%;height:100%}
@@ -144,6 +153,7 @@ button{font:inherit;cursor:pointer}
 .card{background:var(--panel);color:var(--fg);border-radius:22px;padding:24px 22px 22px;max-width:340px;width:100%;
   text-align:center;display:flex;flex-direction:column;gap:12px;animation:pop .35s cubic-bezier(.2,.9,.3,1.3)}
 @keyframes pop{from{transform:scale(.7);opacity:0}}
+.card{max-height:calc(100% - 8px);overflow-y:auto}
 .card h2{font-family:var(--display);font-weight:400;font-size:32px;margin:0}
 .card p{margin:0;font-size:16px;color:var(--muted);line-height:1.5}
 .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
@@ -215,7 +225,7 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
 
   <p class="help"><b>차를 누르면</b> 머리 쪽으로 빠져나가 정류장에 섭니다. 앞이 막힌 차는 못 나가요.
     맨 앞 손님부터 <b>같은 색 차</b>에 타고, 자리가 차면 출발해요. 정류장이 꽉 막히면 집니다.
-    막히면 <b>아이템</b>을 써 보세요. 아이템을 안 쓰고 깨면 별을 더 받아요.</p>
+    손님이 <b>다 탈 때까지 기다렸다가</b> 다음 차를 빼면 실수가 줄어요. 막히면 <b>아이템</b>을 써 보세요. 아이템을 안 쓰고 깨면 별을 더 받아요.</p>
 </div>
 
 <div class="overlay" id="overlay" hidden>
@@ -290,10 +300,21 @@ const HARD_PARAMS = [null,
   {n:8, count:20, colors:6, group:4, bus:.55},
   {n:8, count:22, colors:6, group:4, bus:.60},
 ];
-const LEVEL_COUNT = LEVEL_PARAMS.length - 1;
+const LEVEL_COUNT = 30;
+// levels 1-10 use the tables above; from 11 on the board grows to 10×10 and fills up
+function levelParams(k, hard){
+  if(k <= 10) return (hard ? HARD_PARAMS : LEVEL_PARAMS)[k];
+  const i = k - 11;
+  if(hard){
+    const n = Math.min(10, 8 + Math.floor(i/6));
+    return {n, count: Math.round(n*n*.30) + Math.floor((i%6)/2), colors:6, group:4, bus:.55};
+  }
+  const n = Math.min(10, 8 + Math.floor(i/7));
+  return {n, count: Math.round(n*n*.26) + Math.floor((i%7)/2), colors:6, group:3, bus:.50};
+}
 // seats: small (2 spaces) 4 or 8, medium (3) 16 or 24, large (4) 40
 function pickCap(len, R, k, hard){
-  const up = k*.03 + (hard ? .15 : 0);
+  const up = Math.min(.35, k*.03) + (hard ? .15 : 0);
   if(len === 2) return R() < .25 + up ? 8 : 4;
   if(len === 3) return R() < .35 + up ? 24 : 16;
   return 40;
@@ -317,16 +338,19 @@ const MODE_ITEMS = { easy:{tow:1, shuffle:2, fill:1, slot:1}, hard:{tow:1, shuff
 // Plays the intended order with the game's rules (leftmost bus boards first, 4 bays, no items).
 function solvesCleanly(L){
   const N = L.n, vs = L.vehicles.map(v => ({...v, gone:false}));
+  const byId = new Map(vs.map(v => [v.id, v]));
   const queue = L.queue.slice(), bays = [null,null,null,null];
-  const occ = (x,y) => vs.some(v => !v.gone && (v.h ? (y===v.r && x>=v.c && x<v.c+v.len) : (x===v.c && y>=v.r && y<v.r+v.len)));
+  const occ = (x,y) => vs.some(v => !v.gone && !v.waiting && (v.h ? (y===v.r && x>=v.c && x<v.c+v.len) : (x===v.c && y>=v.r && y<v.r+v.len)));
   const free = v => { let x,y; if(v.h){x=v.dir>0?v.c+v.len:v.c-1;y=v.r}else{x=v.c;y=v.dir>0?v.r+v.len:v.r-1}
     while(x>=0&&y>=0&&x<N&&y<N){ if(occ(x,y)) return false; if(v.h)x+=v.dir; else y+=v.dir; } return true; };
   let removed = 0;
-  for(const v of vs.slice().reverse()){
-    const b = bays.indexOf(null);
+  for(const o of removalOrder(L.vehicles)){
+    const v = byId.get(o.id), b = bays.indexOf(null);
+    if(v.waiting) return false;
     if(!free(v) || b < 0) return false;
     if(v.cover && removed < v.cover) return false;   // garage still closed
     v.gone = true; bays[b] = {v, n:0}; removed++;
+    if(v.spotOf){ const next = vs.find(w => w.tunnel === v.spotOf && w.waiting); if(next) next.waiting = false; }
     for(;;){ const i = bays.findIndex(s => s && queue.length && s.v.color===queue[0] && s.n<s.v.cap); if(i<0) break;
       queue.shift(); if(++bays[i].n === bays[i].v.cap) bays[i] = null; }
   }
@@ -336,9 +360,19 @@ function solvesCleanly(L){
 // special pieces that appear as levels go up:
 //  mystery: color hidden until nothing blocks its way out
 //  cover (garage): opens after that many vehicles have left the lot
+//  tunnel: a queue of cars that pull out one by one into the same spot
 function features(k, hard){
-  if(hard) return { mystery: .25, covers: k>=6 ? 2 : k>=3 ? 1 : 0 };
-  return { mystery: k>=4 ? .2 : 0, covers: k>=9 ? 2 : k>=7 ? 1 : 0 };
+  if(hard) return { mystery: k>=15 ? .3 : .25, covers: k>=15 ? 3 : k>=6 ? 2 : k>=3 ? 1 : 0, tunnels: k>=18 ? 3 : k>=8 ? 2 : k>=5 ? 1 : 0 };
+  return { mystery: k>=20 ? .25 : k>=4 ? .2 : 0, covers: k>=20 ? 3 : k>=9 ? 2 : k>=7 ? 1 : 0, tunnels: k>=22 ? 3 : k>=15 ? 2 : k>=9 ? 1 : 0 };
+}
+// clean solution: reverse placement order, each tunnel's cars right after the car parked in front of it
+function removalOrder(vs){
+  const out = [];
+  for(const v of vs.filter(v => !v.tunnel).reverse()){
+    out.push(v);
+    if(v.spotOf) out.push(...vs.filter(w => w.tunnel === v.spotOf));
+  }
+  return out;
 }
 
 function seeded(seed){ return () => (seed = (seed*1664525 + 1013904223) >>> 0) / 4294967296; }
@@ -350,16 +384,16 @@ function makeLevel(k, mode = 'easy'){
     const L1 = [['c','Y',0,2,3,true,1],['d','G',4,1,2,false,1],['e','R',2,4,3,true,-1],['f','B',0,3,2,false,1],
       ['g','Y',5,3,2,false,-1],['h','G',4,0,2,true,-1],['b','B',2,0,2,false,-1],['a','R',0,0,2,true,-1]];
     const vehicles = L1.map(([id,color,c,r,len,h,dir]) => ({id,color,c,r,len,h,dir,cap: len===3 ? 16 : 4}));
-    return { n:6, vehicles, queue: buildQueue(vehicles.slice().reverse(), 2, seeded(7)) };
+    return { n:6, vehicles, queue: buildQueue(vehicles.slice().reverse(), 2, seeded(7)), tunnels: [] };
   }
-  const P = (hard ? HARD_PARAMS : LEVEL_PARAMS)[k], N = P.n;
+  const P = levelParams(k, hard), N = P.n;
   for(let attempt = 0; attempt < 400; attempt++){
     const R = seeded(k*7919 + attempt*104729 + (hard ? 977 : 13));
     const grid = Array.from({length:N}, () => Array(N).fill(-1));
     const inb = (x,y) => x>=0 && y>=0 && x<N && y<N;
     const vs = [];
     for(let i = 0; i < P.count; i++){
-      const roll = R(), big = BIG[hard ? 'hard' : 'easy'][k];
+      const roll = R(), big = k <= 10 ? BIG[hard ? 'hard' : 'easy'][k] : (hard ? .28 : .18);
       const want = roll < big ? 4 : roll < big + P.bus ? 3 : 2;
       const cands = [];
       for(const len of [2,3,4]) for(const h of [true,false]) for(const dir of [1,-1])
@@ -389,7 +423,6 @@ function makeLevel(k, mode = 'easy'){
     const colors = vs.map((_,i) => i < P.colors ? palette[i] : palette[Math.floor(R()*P.colors)]);
     for(let i = colors.length-1; i > 0; i--){ const j = Math.floor(R()*(i+1)); [colors[i],colors[j]] = [colors[j],colors[i]]; }
     const vehicles = vs.map((v,i) => ({id:'v'+i, color:colors[i], c:v.c, r:v.r, len:v.len, h:v.h, dir:v.dir, cap:pickCap(v.len, R, k, hard)}));
-    const queue = buildQueue(vehicles.slice().reverse(), P.group, R);
     const order = vehicles.slice().reverse(), F = features(k, hard);
     order.forEach((v,i) => { if(i >= 1 && R() < F.mystery) v.mystery = true; });
     const spots = order.map((v,i) => [v,i]).filter(([v,i]) => i >= 2 && !v.mystery);
@@ -397,12 +430,33 @@ function makeLevel(k, mode = 'easy'){
       const [v,i] = spots.splice(Math.floor(R()*spots.length), 1)[0];
       v.cover = Math.min(i, 2 + Math.floor(R()*4));
     }
-    const level = {n:N, vehicles, queue};
+    // tunnels sit right behind a car, on a cell no car ever drives through
+    const tunnels = [];
+    if(F.tunnels){
+      const rays = new Set();
+      for(const v of vehicles){ let x, y; if(v.h){ x = v.dir>0 ? v.c+v.len : v.c-1; y = v.r; } else { x = v.c; y = v.dir>0 ? v.r+v.len : v.r-1; }
+        while(inb(x,y)){ rays.add(x+','+y); if(v.h) x += v.dir; else y += v.dir; } }
+      let cands = order.filter(v => !v.cover).map(v => [v, v.h ? (v.dir>0 ? v.c-1 : v.c+v.len) : v.c, v.h ? v.r : (v.dir>0 ? v.r-1 : v.r+v.len)])
+        .filter(([v,x,y]) => inb(x,y) && grid[y][x] < 0 && !rays.has(x+','+y));
+      for(let t = 0; t < F.tunnels && cands.length; t++){
+        const [v,x,y] = cands.splice(Math.floor(R()*cands.length), 1)[0];
+        cands = cands.filter(([w,xx,yy]) => !(xx===x && yy===y));
+        grid[y][x] = 999;
+        const tid = 't'+t, count = 1 + Math.floor(R()*(hard ? 3 : 2));
+        v.spotOf = tid;
+        for(let s = 0; s < count; s++) vehicles.push({id:tid+'_'+s, color:palette[Math.floor(R()*P.colors)], c:v.c, r:v.r, len:v.len, h:v.h, dir:v.dir,
+          cap:pickCap(v.len, R, k, hard), tunnel:tid, spotOf:tid, waiting:true});
+        tunnels.push({id:tid, c:x, r:y, h:v.h, dir:v.dir});
+      }
+    }
+    const queue = buildQueue(removalOrder(vehicles), P.group, R);
+    const level = {n:N, vehicles, queue, tunnels};
     if(solvesCleanly(level)) return level;
   }
   return null;
 }
 
+let tunnels = [];
 let vehicles, bays, queue, mistakes, busy, over, ticking, startAt, soundOn = true;
 try{ soundOn = localStorage.getItem('bus-sound') !== 'off'; }catch(e){}
 const $ = id => document.getElementById(id);
@@ -492,7 +546,8 @@ function buzz(ms){ try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){} 
 function init(){
   current = makeLevel(levelNo, diff); N = current.n;
   $('board').style.setProperty('--n', N);
-  vehicles = current.vehicles.map(v => ({...v, cap:v.cap, cover:v.cover||0, revealed:!v.mystery, gone:false}));
+  vehicles = current.vehicles.map(v => ({...v, cap:v.cap, cover:v.cover||0, revealed:!v.mystery, waiting:!!v.waiting, gone:false}));
+  tunnels = current.tunnels || [];
   revealFree();
   bays = Array(START_BAYS).fill(null);
   queue = current.queue.slice(); lastQueueLen = queue.length; stuckWarned = false;
@@ -505,7 +560,7 @@ function init(){
 
 /* ---------- items ---------- */
 // cars still in the lot whose color can be shuffled (garages stay shut, hidden cars keep their secret)
-function shufflePool(){ return vehicles.filter(v => !v.gone && !v.cover); }
+function shufflePool(){ return vehicles.filter(v => !v.gone && !v.cover && !v.waiting); }
 function canShuffle(){
   const pool = shufflePool();
   return [...new Set(pool.map(v=>v.cap))].some(c => new Set(pool.filter(v=>v.cap===c).map(v=>v.color)).size > 1);
@@ -572,7 +627,7 @@ $('it-slot').onclick = ()=>{
   sfx.board(4); drawBays({opened:bays.length-1}); drawItems(); toast('자리 +1'); kick();
 };
 function cells(v){ const o=[]; for(let i=0;i<v.len;i++) o.push(v.h?[v.c+i,v.r]:[v.c,v.r+i]); return o; }
-function occupant(x,y){ return vehicles.find(v=>!v.gone && cells(v).some(([a,b])=>a===x&&b===y)); }
+function occupant(x,y){ return vehicles.find(v=>!v.gone && !v.waiting && cells(v).some(([a,b])=>a===x&&b===y)); }
 function blockerOf(v){
   let x, y;
   if(v.h){ x = v.dir>0 ? v.c+v.len : v.c-1; y = v.r; } else { x = v.c; y = v.dir>0 ? v.r+v.len : v.r-1; }
@@ -581,11 +636,21 @@ function blockerOf(v){
 }
 
 function drawBoard(flash){
-  const b = $('board'); b.querySelectorAll('.veh').forEach(e=>e.remove());
+  const b = $('board'); b.querySelectorAll('.veh,.tunnel').forEach(e=>e.remove());
+  for(const t of tunnels){
+    const left = vehicles.filter(w => w.tunnel === t.id && w.waiting).length;
+    const el = document.createElement('div');
+    el.className = 'tunnel' + (left ? '' : ' empty'); el.style.padding = (7/N)+'%';
+    el.style.left = t.c/N*100+'%'; el.style.top = t.r/N*100+'%'; el.style.width = el.style.height = 100/N+'%';
+    const arrow = t.h ? (t.dir>0?'→':'←') : (t.dir>0?'↓':'↑');
+    el.innerHTML = `<span><i>${arrow}</i><b>${left ? '×'+left : '빈'}</b></span>`;
+    el.setAttribute('aria-label', `터널, 남은 차 ${left}대`);
+    b.appendChild(el);
+  }
   for(const v of vehicles){
-    if(v.gone) continue;
+    if(v.gone || v.waiting) continue;
     const el = document.createElement('button');
-    el.className = 'veh'; el.id = 'veh-'+v.id;
+    el.className = 'veh'; el.id = 'veh-'+v.id; el.style.padding = (7/N)+'%';
     el.style.left = v.c/N*100+'%'; el.style.top = v.r/N*100+'%';
     el.style.width = (v.h?v.len:1)/N*100+'%'; el.style.height = (v.h?1:v.len)/N*100+'%';
     const way = v.h ? (v.dir>0?'오른쪽':'왼쪽') : (v.dir>0?'아래':'위');
@@ -599,7 +664,7 @@ function drawBoard(flash){
     const hidden = v.mystery && !v.revealed;
     el.setAttribute('aria-label', hidden ? `물음표 ${KIND[v.cap]}, ${way}으로 나감` : `${NAME[v.color]} ${KIND[v.cap]}(${v.cap}명), ${way}으로 나감`);
     el.innerHTML = vehicleSVG(hidden ? 'X' : v.color, v.len, v.h, v.dir, hidden ? '?' : v.cap);
-    if(flash && flash.has(v)) el.classList.add(v.mystery ? 'reveal' : 'opened');
+    if(flash && flash.has(v)) el.classList.add(flash.get(v));
     el.onclick = () => tap(v, el);
     b.appendChild(el);
   }
@@ -659,7 +724,7 @@ function tap(v, el){
     sfx.depart(); buzz(20); el.classList.add('going','lift'); drawItems();
     setTimeout(()=>{
       v.gone = true; el.remove(); bays[free] = {v, n:0, leaving:false};
-      busy = false; afterLeave(); drawBays({arrive:free}); drawStat(); drawItems(); setTimeout(kick, 300);
+      busy = false; afterLeave(v); drawBays({arrive:free}); drawStat(); drawItems(); setTimeout(kick, 300);
     }, 470);
     return;
   }
@@ -679,7 +744,7 @@ function tap(v, el){
   setTimeout(()=>{
     v.gone = true; el.remove();
     bays[free] = {v, n:0, leaving:false};
-    busy = false; afterLeave(); drawBays({arrive:free}); drawStat(); drawItems();
+    busy = false; afterLeave(v); drawBays({arrive:free}); drawStat(); drawItems();
     setTimeout(kick, 300);
   }, 430);
 }
@@ -687,19 +752,27 @@ function tap(v, el){
 /* ---------- garages and question-mark cars ---------- */
 function revealFree(){
   const shown = [];
-  for(const v of vehicles) if(!v.gone && v.mystery && !v.revealed && !v.cover && !blockerOf(v)){ v.revealed = true; shown.push(v); }
+  for(const v of vehicles) if(!v.gone && !v.waiting && v.mystery && !v.revealed && !v.cover && !blockerOf(v)){ v.revealed = true; shown.push(v); }
   return shown;
 }
-function afterLeave(){
-  const flash = new Set();
-  for(const v of vehicles) if(!v.gone && v.cover > 0){ v.cover--; if(v.cover === 0) flash.add(v); }
-  revealFree().forEach(v => flash.add(v));
+function afterLeave(left){
+  const flash = new Map();
+  let opened = false, spawned = false;
+  for(const v of vehicles) if(!v.gone && v.cover > 0){ v.cover--; if(v.cover === 0){ flash.set(v, 'opened'); opened = true; } }
+  if(left && left.spotOf){
+    const next = vehicles.find(w => w.tunnel === left.spotOf && w.waiting);
+    if(next){ next.waiting = false; flash.set(next, 'spawn'); spawned = true; }
+  }
+  revealFree().forEach(v => flash.set(v, 'reveal'));
   drawBoard(flash);
-  if([...flash].some(v => !v.mystery)){ toast('차고 열림!'); sfx.board(6); }
+  if(opened){ toast('차고 열림!'); sfx.board(6); }
+  else if(spawned){ sfx.go(); }
 }
 const FEATURE_INFO = {
   mystery: { title: '새로운 차: 물음표 차', text: '색깔이 가려진 까만 차예요. 앞길이 뚫리면 진짜 색깔이 보여요.',
     pic: () => `<div class="sample">${vehicleSVG('X', 2, true, 1, '?')}</div>` },
+  tunnel: { title: '새로운 칸: 터널', text: '터널 앞의 차가 빠지면, 터널 안에 있던 차가 같은 자리로 나와요. 숫자는 터널에 남은 차 수예요.',
+    pic: () => `<div class="sample" style="width:90px"><span class="tunnel" style="position:static;display:block;width:90px;height:80px;padding:0"><span><i>↑</i><b>×2</b></span></span></div>` },
   cover: { title: '새로운 칸: 차고', text: '숫자만큼 다른 차가 주차장을 빠져나가면 문이 열리고, 안에 있던 차가 나와요.',
     pic: () => `<div class="sample" style="width:90px"><span class="garage"><b>3</b><small>차고</small></span></div>` },
 };
@@ -709,6 +782,7 @@ function showIntro(){
   introQueue = [];
   if(vehicles.some(v => v.mystery) && !progress.seen.mystery) introQueue.push('mystery');
   if(vehicles.some(v => v.cover) && !progress.seen.cover) introQueue.push('cover');
+  if(tunnels.length && !progress.seen.tunnel) introQueue.push('tunnel');
   nextIntro();
 }
 function nextIntro(){
@@ -721,7 +795,7 @@ function nextIntro(){
 }
 $('inBtn').onclick = nextIntro;
 
-function kick(){ if(!ticking){ ticking = true; setTimeout(step, 70); } }
+function kick(){ if(!ticking){ ticking = true; setTimeout(step, queue.length > 300 ? 40 : 70); } }
 function step(){
   ticking = false; if(over) return;
   if(queue.length){

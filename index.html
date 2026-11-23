@@ -68,9 +68,15 @@ button{font:inherit;cursor:pointer}
 .more{font-family:var(--display);font-size:14px;color:var(--muted);margin-left:auto;padding:0 4px 10px;white-space:nowrap}
 .curb{height:8px;background:repeating-linear-gradient(90deg,var(--curb) 0 20px,#fff 20px 40px)}
 
-.bays{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:var(--asphalt);padding:8px}
-.bay{position:relative;aspect-ratio:1/1.35;border:2px dashed rgba(255,255,255,.45);border-top:0;border-radius:0 0 10px 10px;
+.bays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;background:var(--asphalt);padding:6px}
+.bay{position:relative;min-width:0;aspect-ratio:1/1.5;border:2px dashed rgba(255,255,255,.45);border-top:0;border-radius:0 0 10px 10px;
   display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:4px 0 6px;gap:4px}
+.bay.locked{border:2px solid rgba(255,255,255,.12);border-top:0;background:rgba(0,0,0,.28);justify-content:center;cursor:pointer;gap:2px}
+.bay.locked svg{width:44%;height:auto;opacity:.55}
+.bay.locked small{font-family:var(--display);font-size:11px;color:rgba(255,255,255,.55);text-align:center;line-height:1.1}
+.bay.locked.nope{cursor:default}
+.bay.opened{animation:opened .5s}
+@keyframes opened{0%{background:rgba(255,194,26,.6)}}
 .bay .num{position:absolute;bottom:4px;left:0;right:0;text-align:center;font-family:var(--display);font-size:18px;color:rgba(255,255,255,.35)}
 .bay .mini{width:62%;flex:1;min-height:0;display:flex;justify-content:center}
 .bay .mini svg{height:100%;width:auto;max-width:100%;filter:drop-shadow(0 3px 2px rgba(0,0,0,.35))}
@@ -228,7 +234,7 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
 <canvas id="fx"></canvas>
 
 <script>
-let N = 6; const START_BAYS = 4;
+let N = 6; const START_BAYS = 4, MAX_BAYS = 7;
 let items, mode = null, used = 0, rescued = false;
 const SYM = {R:'●', B:'■', Y:'▲', G:'◆', P:'★', K:'♥'};
 const NAME = {R:'빨강', B:'파랑', Y:'노랑', G:'초록', P:'보라', K:'분홍'};
@@ -452,6 +458,7 @@ function drawItems(){
     $('it-'+k).disabled = over || items[k] <= 0
       || (k==='shuffle' && !canShuffle())
       || (k==='fill' && !bays.some(s=>s && !s.leaving))
+      || (k==='slot' && bays.length >= MAX_BAYS)
       || (k==='tow' && !vehicles.some(v=>!v.gone));
   }
   $('it-tow').classList.toggle('on', mode==='tow');
@@ -500,10 +507,10 @@ function fillBay(i){
   drawQueue(); drawBays({bump:i}); drawStat(); drawItems();
 }
 $('it-slot').onclick = ()=>{
-  if(over || items.slot <= 0) return;
-  items.slot--; used++;
+  if(over || items.slot <= 0 || bays.length >= MAX_BAYS) return;
+  items.slot--; used++; mode = null;
   bays.push(null);
-  sfx.board(4); drawBays({arrive:-1}); drawItems(); toast('자리 +1'); kick();
+  sfx.board(4); drawBays({opened:bays.length-1}); drawItems(); toast('자리 +1'); kick();
 };
 function cells(v){ const o=[]; for(let i=0;i<v.len;i++) o.push(v.h?[v.c+i,v.r]:[v.c,v.r+i]); return o; }
 function occupant(x,y){ return vehicles.find(v=>!v.gone && cells(v).some(([a,b])=>a===x&&b===y)); }
@@ -544,17 +551,26 @@ function drawQueue(){
 }
 function drawBays(flags={}){
   const w = $('bays'); w.innerHTML='';
-  w.style.gridTemplateColumns = `repeat(${bays.length},1fr)`;
   const almost = bays.filter(Boolean).length >= bays.length-1;
   bays.forEach((s,i)=>{
     const d = document.createElement('div');
-    d.className = 'bay' + (s?' full':'') + (s&&s.leaving?' leaving':'') + (flags.arrive===i?' arrive':'') + (flags.bump===i?' bump':'') + (!s&&almost&&!over?' warn':'');
+    d.className = 'bay' + (s?' full':'') + (s&&s.leaving?' leaving':'') + (flags.arrive===i?' arrive':'') + (flags.bump===i?' bump':'') + (!s&&almost&&!over?' warn':'') + (flags.opened===i?' opened':'');
     if(s){
       d.innerHTML = `<div class="mini">${vehicleSVG(s.v.color, s.v.len, false, -1)}</div><span class="cnt">${s.n}/${s.v.cap}</span>`;
       if(mode==='fill' && !s.leaving){ d.onclick = ()=>fillBay(i); d.setAttribute('role','button'); d.setAttribute('aria-label', `${i+1}번 버스 채우기`); }
     } else d.innerHTML = `<span class="num">${i+1}</span>`;
     w.appendChild(d);
   });
+  // locked slots: shown from the start, opened by the 자리 추가 item
+  for(let i = bays.length; i < MAX_BAYS; i++){
+    const d = document.createElement('button');
+    const can = items && items.slot > 0 && !over;
+    d.className = 'bay locked' + (can ? '' : ' nope');
+    d.setAttribute('aria-label', can ? `${i+1}번 자리 열기 (자리 추가 아이템 사용)` : `${i+1}번 자리, 잠김`);
+    d.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2" fill="#fff"/><path d="M8 10 V7 a4 4 0 0 1 8 0 v3" stroke="#fff" stroke-width="2.4" fill="none"/></svg><small>${can ? '눌러서 열기' : '잠김'}</small>`;
+    d.onclick = ()=>{ if(can) $('it-slot').click(); else { toast('자리 추가 아이템이 없어요'); sfx.honk(); } };
+    w.appendChild(d);
+  }
 }
 function drawStat(){
   const total = current.queue.length, done = total - queue.length;
@@ -693,7 +709,7 @@ $('ovRetry').onclick = init;
 $('ovRescue').onclick = ()=>{
   rescued = true; over = false; used++; stuckWarned = false;
   $('overlay').hidden = true; $('wrap').classList.remove('quake');
-  bays.push(null); sfx.board(4); drawBays({arrive:-1}); drawItems(); toast('자리 +1'); kick();
+  if(bays.length < MAX_BAYS) bays.push(null); sfx.board(4); drawBays({opened:bays.length-1}); drawItems(); toast('자리 +1'); kick();
 };
 
 /* ---------- level picker ---------- */

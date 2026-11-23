@@ -300,6 +300,9 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
     <button class="btn" id="pickClose">닫기</button>
   </div>
 </div>
+<div class="overlay" id="loading" hidden>
+  <div class="card"><h2>판 만드는 중…</h2><p>차를 주차장에 세우고 있어요. 잠깐만 기다려 주세요.</p></div>
+</div>
 <div class="overlay" id="quest" hidden>
   <div class="card">
     <h2>선물 · 퀘스트</h2>
@@ -488,7 +491,7 @@ function levelParams(k, hard){
     return {n, count: Math.round(n*n*.30) + Math.floor((i%6)/2), colors:7, group:4, bus:.55};
   }
   const n = Math.min(10, 8 + Math.floor(i/7));
-  return {n, count: Math.round(n*n*.26) + Math.floor((i%7)/2), colors: k>=15 ? 7 : 6, group:3, bus:.50};
+  return {n, count: Math.round(n*n*.26) + Math.floor((i%7)/2), colors: k>=15 ? 7 : 6, group: k>=16 ? 4 : 3, bus:.50};
 }
 // seats: small (2 spaces) 4 or 8, medium (3) 16 or 24, large (4) 40
 function pickCap(len, R, k, hard){
@@ -575,10 +578,12 @@ function solvesCleanly(L, rec){
     if(v.timer && removed >= v.timer) return false;   // 구급차가 늦음 (그 전에 다른 차를 timer번 이상 뺌)
     if(rec) rec[v.id] = removed;
     v.gone = true; bays[b] = {v, n:0}; removed++;
+    if(rec) rec.__peak = Math.max(rec.__peak || 0, bays.filter(Boolean).length);
     for(const w of vs) if(w.flip && !w.gone) turnAround(w);   // 다른 차가 빠질 때마다 앞뒤가 바뀐다
     if(v.spotOf){ const next = vs.find(w => w.tunnel === v.spotOf && w.waiting); if(next) next.waiting = false; }
     for(;;){ const i = bays.findIndex(s => s && queue.length && s.v.color===queue[0] && s.n<s.v.cap); if(i<0) break;
       queue.shift(); boarded++; if(++bays[i].n === bays[i].v.cap) bays[i] = null; }
+    if(rec) rec.__peak = Math.max(rec.__peak || 0, bays.filter(Boolean).length + 0);
   }
   return !queue.length && bays.every(s => !s);
 }
@@ -673,6 +678,38 @@ function peelBoard(vs, N, R){
   return order;
 }
 
+/* 쉬운 방법으로 해 보기: 줄 앞쪽에서 먼저 필요한 색의 차부터, 빠질 수 있는 차를 뺀다.
+   이 방법으로도 깨지면 '너무 쉬운 판'으로 본다. */
+function greedyWins(L){
+  const N = L.n, vs = L.vehicles.map(v => ({...v, gone:false}));
+  const queue = L.queue.slice(), bays = [null,null,null,null];
+  let removed = 0;
+  const board = () => { for(;;){ const i = bays.findIndex(s => s && queue.length && s.v.color===queue[0] && s.n<s.v.cap); if(i<0) return;
+    queue.shift(); if(++bays[i].n === bays[i].v.cap) bays[i] = null; } };
+  for(let step = 0; step < 2000; step++){
+    board();
+    if(!queue.length && bays.every(s => !s)) return true;
+    const b = bays.indexOf(null);
+    if(b < 0) return false;
+    const free = vs.filter(v => {
+      if(v.gone || v.waiting || (v.cover && removed < v.cover)) return false;
+      const taken = new Set();
+      for(const w of vs) if(w !== v && !w.gone && !w.waiting) geoBlock(w).forEach(([x,y]) => taken.add(x+','+y));
+      for(const t of L.tunnels || []) taken.add(t.c+','+t.r);
+      return !geoSwept(v, N).some(([x,y]) => taken.has(x+','+y));
+    });
+    if(!free.length) return false;
+    const want = c => { const i = queue.indexOf(c); return i < 0 ? 1e9 : i; };
+    const urgent = free.find(v => v.amb && v.timer - removed <= 2);
+    const v = urgent || free.sort((a,b) => want(a.color) - want(b.color))[0];
+    v.gone = true; bays[b] = {v, n:0}; removed++;
+    if(vs.some(w => w.amb && !w.gone && removed >= w.timer)) return false;
+    for(const w of vs) if(w.flip && !w.gone) turnAround(w);
+    if(v.spotOf){ const next = vs.find(w => w.tunnel === v.spotOf && w.waiting); if(next) next.waiting = false; }
+  }
+  return false;
+}
+
 function seeded(seed){ return () => (seed = (seed*1664525 + 1013904223) >>> 0) / 4294967296; }
 
 function makeLevel(k, mode = 'easy'){
@@ -691,6 +728,8 @@ function makeLevel(k, mode = 'easy'){
   // diagonal cars also use the corner cells they cut across, so boards with them hold fewer cars
   const base = F.diag > 0 ? {...P0, count: Math.round(P0.count * (1 - F.diag*.7))} : P0;
   const tries = dense ? [[1, 300]] : [[1.3, 40], [1.15, 80], [1, 400]];
+  let fallback = null;   // 아슬아슬한 판을 못 찾으면 처음 만든 깰 수 있는 판
+  const started = Date.now();
   for(const [more, limit] of tries){
   const P = {...base, count: Math.round(base.count * more)};
   for(let attempt = 0; attempt < limit; attempt++){
@@ -791,11 +830,17 @@ function makeLevel(k, mode = 'easy'){
     const rec = {};
     if(!solvesCleanly(level, rec)) continue;
     // 구급차 제한: 다른 차를 몇 번 빼기 전에 보내야 하는지. 바르게 풀 때 그 전에 빼는 차 수 + 여유(30%, 적어도 4)
-    for(const v of vehicles) if(v.amb) v.timer = rec[v.id] + Math.max(4, Math.ceil(rec[v.id]*.3));
-    if(solvesCleanly(level)) return level;
+    for(const v of vehicles) if(v.amb) v.timer = rec[v.id] + Math.max(3, Math.ceil(rec[v.id]*.15));
+    if(!solvesCleanly(level)) continue;
+    // 아슬아슬하게: 바르게 풀 때 정류장 4칸이 한 번은 꽉 차야 하고, 뒤 단계는 쉬운 방법으로는 못 깨야 한다
+    const tightBays = k < 4 || (rec.__peak || 0) >= 4;
+    const needHard = hard ? k >= 5 : k >= 18;
+    if(tightBays && (!needHard || !greedyWins(level))) return level;
+    if(!fallback) fallback = level;
+    if(Date.now() - started > 1500) return fallback;   // 휴대폰에서 오래 기다리지 않게 1.5초까지만 찾는다
   }
   }
-  return null;
+  return fallback;
 }
 
 let tunnels = [], lostAmb = false;
@@ -902,8 +947,17 @@ const sfx = {
 function buzz(ms){ try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){} }
 
 /* ---------- game ---------- */
+// 한 번 만든 판은 기억해 두고(다시 하기는 바로), 처음 만들 때는 「판 만드는 중」을 보여 준다
+const levelCache = {};
 function init(){
-  current = makeLevel(levelNo, diff); N = current.n;
+  const key = diff + levelNo;
+  if(levelCache[key]) return initNow();
+  $('loading').hidden = false;
+  setTimeout(() => { initNow(); $('loading').hidden = true; }, 40);
+}
+function initNow(){
+  const key = diff + levelNo;
+  current = levelCache[key] || (levelCache[key] = makeLevel(levelNo, diff)); N = current.n;
   $('board').style.setProperty('--n', N);
   vehicles = current.vehicles.map(v => ({...v, cap:v.cap, cover:v.cover||0, revealed:!v.mystery, waiting:!!v.waiting, timeLeft:v.timer||0, gone:false}));
   lostAmb = false;

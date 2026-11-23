@@ -139,6 +139,26 @@ button{font:inherit;cursor:pointer}
   border:2px solid var(--line);background:var(--panel);color:var(--fg);font-family:var(--display);font-size:15px;white-space:nowrap;box-shadow:0 4px 0 var(--line)}
 .item:active{transform:translateY(2px);box-shadow:0 2px 0 var(--line)}
 .item svg{width:26px;height:26px;flex:0 0 auto}
+.questbtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;font-family:var(--display);font-size:17px;padding:9px 12px;
+  border-radius:14px;border:2px solid #f5b700;background:linear-gradient(180deg,#fff6d6,#ffe9a3);color:#5a3a00;box-shadow:0 3px 0 #d9a200;position:relative}
+.questbtn:active{transform:translateY(2px);box-shadow:0 1px 0 #d9a200}
+.questbtn .dot{min-width:24px;height:24px;border-radius:99px;background:#e5484d;color:#fff;font-size:14px;display:grid;place-items:center;padding:0 6px}
+.questbtn small{font-size:14px;opacity:.8}
+.qsec{display:flex;flex-direction:column;gap:8px;text-align:left}
+.qsec h3{font-family:var(--display);font-weight:400;font-size:19px;margin:4px 0 0}
+.qrow{display:flex;align-items:center;gap:10px;background:var(--bg);border-radius:12px;padding:10px}
+.qrow .qt{flex:1;min-width:0;font-size:15px;line-height:1.35}
+.qrow .qt b{display:block;font-size:16px}
+.qbar{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:5px}
+.qbar i{display:block;height:100%;background:#1fa36a}
+.qrow .btn{font-size:15px;padding:8px 12px;white-space:nowrap}
+.qrow .btn:disabled{opacity:.4;box-shadow:none;cursor:default}
+.qrow .done{font-family:var(--display);font-size:14px;color:var(--muted);white-space:nowrap}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.day{border-radius:10px;background:var(--bg);padding:6px 2px;text-align:center;font-size:12px;line-height:1.3;border:2px solid transparent}
+.day b{display:block;font-family:var(--display);font-weight:400;font-size:15px}
+.day.got{opacity:.5}
+.day.today{border-color:#f5b700;background:#fff3c4;color:#5a3a00}
 .coins{display:inline-flex;align-items:center;gap:4px;font-family:var(--display);font-size:16px;font-variant-numeric:tabular-nums;
   background:var(--panel);border:2px solid var(--line);border-radius:99px;padding:2px 10px 2px 4px;margin-left:6px;vertical-align:1px}
 .coin{width:20px;height:20px;flex:0 0 auto}
@@ -208,6 +228,7 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
     </div>
   </header>
   <div class="progress" aria-hidden="true"><i id="bar"></i></div>
+  <button class="questbtn" id="questBtn">선물 · 퀘스트 <small id="questSum"></small><span class="dot" id="questDot" hidden>0</span></button>
 
   <div class="street">
     <div class="walk"><span class="sign">정류장</span><div class="line" id="queue"></div></div>
@@ -265,6 +286,25 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
     <button class="btn" id="pickClose">닫기</button>
   </div>
 </div>
+<div class="overlay" id="quest" hidden>
+  <div class="card">
+    <h2>선물 · 퀘스트</h2>
+    <div class="qsec">
+      <h3>매일 선물 <small id="streakTxt" style="font-family:var(--body);font-size:14px;color:var(--muted)"></small></h3>
+      <div class="days" id="days"></div>
+      <button class="btn primary" id="dailyBtn">오늘 선물 받기</button>
+    </div>
+    <div class="qsec">
+      <h3>오늘의 퀘스트</h3>
+      <div id="qlist" class="qsec"></div>
+    </div>
+    <div class="qsec">
+      <h3>깬 판 선물</h3>
+      <div id="mile"></div>
+    </div>
+    <button class="btn" id="questClose">닫기</button>
+  </div>
+</div>
 <div class="overlay" id="shop" hidden>
   <div class="card">
     <h2 id="shTitle"></h2>
@@ -296,9 +336,95 @@ try{ const p = JSON.parse(localStorage.getItem('bus-progress')||'null'); if(p &&
   const last = JSON.parse(localStorage.getItem('bus-last')||'null'); if(last && progress[last.diff] && last.level>=1 && last.level<=progress[last.diff].unlocked){ diff = last.diff; levelNo = last.level; } }catch(e){}
 // older saves had no coins or items yet
 if(typeof progress.coins !== 'number') progress.coins = 100;
+if(typeof progress.mileDone !== 'number') progress.mileDone = Math.floor((Object.keys(progress.easy.stars).length + Object.keys(progress.hard.stars).length)/5);
 if(!progress.items) progress.items = {tow:2, shuffle:2, fill:2, slot:2};
 const PRICE = {tow:60, shuffle:40, fill:60, slot:50};
 const ITEM_NAME = {tow:'견인차', shuffle:'섞기', fill:'채우기', slot:'자리 추가'};
+/* ---------- daily gift, daily quests, milestones ---------- */
+const DAILY = [30, 40, 50, 60, 70, 80, 100];          // coins for day 1..7 of a streak; day 7 also gives a tow truck
+const QUESTS = [
+  {id:'win3',  text:'판 3번 깨기',            goal:3,   ev:'win',     reward:{coins:30}},
+  {id:'pax',   text:'손님 600명 태우기',      goal:600, ev:'pax',     reward:{coins:40}},
+  {id:'star3', text:'별 3개로 2번 깨기',      goal:2,   ev:'star3',   reward:{coins:40}},
+  {id:'noitem',text:'아이템 없이 1번 깨기',   goal:1,   ev:'noitem',  reward:{shuffle:1}},
+  {id:'hard',  text:'어려움 모드 1번 깨기',   goal:1,   ev:'hardwin', reward:{coins:50}},
+  {id:'pat',   text:'환자 손님 48명 태우기',  goal:48,  ev:'patient', reward:{fill:1}},
+  {id:'item',  text:'아이템 2번 쓰기',        goal:2,   ev:'item',    reward:{coins:30}},
+  {id:'win5',  text:'판 5번 깨기',            goal:5,   ev:'win',     reward:{tow:1}},
+];
+// every 5 levels cleared (both modes together) gives a present
+const MILESTONES = [{tow:1}, {coins:100}, {shuffle:2}, {fill:1, slot:1}, {coins:150}, {tow:1, fill:1}];
+function dayKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function rewardText(r){
+  return Object.entries(r).map(([k,n]) => k==='coins' ? `동전 ${n}개` : `${ITEM_NAME[k]} ${n}개`).join(' · ');
+}
+function giveReward(r){
+  for(const [k,n] of Object.entries(r)){ if(k==='coins') progress.coins += n; else progress.items[k] = (progress.items[k]||0) + n; }
+}
+function ensureDay(){
+  const today = dayKey(new Date()), yest = dayKey(new Date(Date.now()-864e5));
+  const d = progress.daily || {date:'', streak:0, claimed:false};
+  if(d.date !== today){
+    d.streak = d.date === yest ? d.streak % 7 + 1 : 1;
+    d.date = today; d.claimed = false;
+  }
+  progress.daily = d;
+  if(!progress.quests || progress.quests.date !== today){
+    // the same three quests all day, a different set tomorrow
+    const R = seeded(Number(today.replace(/-/g,'')));
+    const pool = QUESTS.slice(), list = [];
+    while(list.length < 3){ const q = pool.splice(Math.floor(R()*pool.length), 1)[0]; list.push({id:q.id, n:0, claimed:false}); }
+    progress.quests = {date: today, list};
+  }
+}
+function questEvent(ev, amount = 1){
+  if(!progress.quests) return;
+  let changed = false;
+  for(const q of progress.quests.list){
+    const def = QUESTS.find(d => d.id === q.id);
+    if(def && def.ev === ev && q.n < def.goal){ q.n = Math.min(def.goal, q.n + amount); changed = true; }
+  }
+  if(changed) drawQuestBtn();
+}
+function claimable(){
+  let n = progress.daily && !progress.daily.claimed ? 1 : 0;
+  for(const q of progress.quests.list){ const def = QUESTS.find(d => d.id === q.id); if(!q.claimed && q.n >= def.goal) n++; }
+  return n;
+}
+function drawQuestBtn(){
+  const n = claimable(), done = progress.quests.list.filter(q => q.claimed).length;
+  $('questDot').hidden = !n; $('questDot').textContent = n;
+  $('questSum').textContent = `퀘스트 ${done}/3`;
+}
+function cleared(){ return Object.keys(progress.easy.stars).length + Object.keys(progress.hard.stars).length; }
+function drawQuest(){
+  const d = progress.daily;
+  $('streakTxt').textContent = `연속 ${d.streak}일째`;
+  $('days').innerHTML = DAILY.map((c,i) => {
+    const day = i+1, got = day < d.streak || (day === d.streak && d.claimed), today = day === d.streak && !d.claimed;
+    return `<div class="day${got?' got':''}${today?' today':''}"><b>${day}일</b>${c}${day===7?'<br>+견인차':''}</div>`;
+  }).join('');
+  $('dailyBtn').disabled = d.claimed;
+  $('dailyBtn').textContent = d.claimed ? '오늘 선물은 받았어요' : `오늘 선물 받기 (동전 ${DAILY[d.streak-1]}개${d.streak===7?' + 견인차':''})`;
+  $('qlist').innerHTML = '';
+  progress.quests.list.forEach(q => {
+    const def = QUESTS.find(x => x.id === q.id), full = q.n >= def.goal;
+    const row = document.createElement('div'); row.className = 'qrow';
+    row.innerHTML = `<div class="qt"><b>${def.text}</b>${q.n}/${def.goal} · 보상: ${rewardText(def.reward)}<div class="qbar"><i style="width:${q.n/def.goal*100}%"></i></div></div>`;
+    if(q.claimed) row.insertAdjacentHTML('beforeend', '<span class="done">받았어요</span>');
+    else {
+      const b = document.createElement('button'); b.className = 'btn' + (full ? ' primary' : ''); b.textContent = '받기'; b.disabled = !full;
+      b.onclick = () => { q.claimed = true; giveReward(def.reward); sfx.win(); toast(rewardText(def.reward) + ' 받음!'); saveProgress(); drawQuest(); drawItems(); drawQuestBtn(); };
+      row.appendChild(b);
+    }
+    $('qlist').appendChild(row);
+  });
+  const c = cleared(), next = (Math.floor(c/5)+1)*5;
+  const nextGift = MILESTONES[(next/5-1) % MILESTONES.length];
+  $('mile').innerHTML = `<div class="qrow"><div class="qt"><b>지금까지 ${c}판 깼어요</b>${next}판 깨면: ${rewardText(nextGift)}<div class="qbar"><i style="width:${(c%5)/5*100}%"></i></div></div></div>`;
+}
+function openQuest(){ ensureDay(); drawQuest(); $('quest').hidden = false; $('questClose').focus(); }
+
 function saveProgress(){ try{ localStorage.setItem('bus-progress', JSON.stringify(progress)); localStorage.setItem('bus-last', JSON.stringify({diff, level:levelNo})); }catch(e){} }
 // [id, color, col, row, length, horizontal, dir(+1 right/down, -1 left/up)]
 /* Level data. Level 1 is hand-made; the rest are generated so that a clean solution always exists:
@@ -703,7 +829,7 @@ $('it-tow').onclick = ()=>{
 $('it-shuffle').onclick = ()=>{
   if(over || busy || !canShuffle()) return;
   if(items.shuffle <= 0){ offerBuy('shuffle'); return; }
-  items.shuffle--; used++; mode = null; drawBays();
+  items.shuffle--; used++; questEvent('item'); mode = null; drawBays();
   const pool = shufflePool();
   for(const c of new Set(pool.map(v=>v.cap))){
     const group = pool.filter(v=>v.cap===c), cols = group.map(v=>v.color);
@@ -725,9 +851,11 @@ $('it-fill').onclick = ()=>{
 function fillBay(i){
   const s = bays[i];
   if(mode!=='fill' || !s || s.leaving || over) return;
-  mode = null; items.fill--; used++;
+  mode = null; items.fill--; used++; questEvent('item');
   let need = s.v.cap - s.n;
+  const got = need;
   for(let k=0; k<queue.length && need>0; ){ if(queue[k]===s.v.color){ queue.splice(k,1); s.n++; need--; } else k++; }
+  questEvent('pax', got - need); if(s.v.color === 'W') questEvent('patient', got - need);
   s.leaving = true; sfx.board(6); buzz(20);
   setTimeout(()=>{ sfx.depart(); toast('꽉 채워 출발!'); }, 120);
   setTimeout(()=>{ bays[bays.indexOf(s)] = null; drawBays(); drawItems(); checkEnd(); kick(); }, 650);
@@ -736,7 +864,7 @@ function fillBay(i){
 $('it-slot').onclick = ()=>{
   if(over || bays.length >= MAX_BAYS) return;
   if(items.slot <= 0){ offerBuy('slot'); return; }
-  items.slot--; used++; mode = null;
+  items.slot--; used++; questEvent('item'); mode = null;
   bays.push(null);
   sfx.board(4); drawBays({opened:bays.length-1}); drawItems(); toast('자리 +1'); kick();
 };
@@ -854,7 +982,7 @@ function tap(v, el){
   const free = bays.indexOf(null);
   if(mode==='tow'){
     if(free<0){ mode=null; drawItems(); toast('정류장 자리가 없어요'); return; }
-    mode = null; items.tow--; used++; busy = true;
+    mode = null; items.tow--; used++; questEvent('item'); busy = true;
     sfx.depart(); buzz(20); el.classList.add('going','lift'); drawItems();
     setTimeout(()=>{
       v.gone = true; el.remove(); bays[free] = {v, n:0, leaving:false};
@@ -960,7 +1088,8 @@ function step(){
     const i = bays.findIndex(s=>s && !s.leaving && s.v.color===queue[0] && s.n<s.v.cap);
     if(i>=0){
       const s = bays[i];
-      queue.shift(); s.n++; sfx.board(s.n);
+      const who = queue.shift(); s.n++; sfx.board(s.n);
+      questEvent('pax'); if(who === 'W') questEvent('patient');
       if(s.n===s.v.cap){
         s.leaving = true;
         setTimeout(()=>{ sfx.depart(); toast('출발!'); }, 120);
@@ -1008,6 +1137,18 @@ function finish(win){
     const reward = (diff==='hard' ? 20 : 10) + stars*5;
     progress.coins += reward; $('coinN').textContent = progress.coins;
     $('ovText').textContent += ` 동전 +${reward}개!`;
+    ensureDay();
+    questEvent('win'); if(stars === 3) questEvent('star3'); if(!used) questEvent('noitem'); if(diff === 'hard') questEvent('hardwin');
+    // a present for every 5 levels cleared
+    const c = cleared(), mileDone = progress.mileDone || 0;
+    if(Math.floor(c/5) > mileDone){
+      for(let m = mileDone+1; m <= Math.floor(c/5); m++){
+        const gift = MILESTONES[(m-1) % MILESTONES.length];
+        giveReward(gift); $('ovText').textContent += ` ${m*5}판 깬 선물: ${rewardText(gift)}!`;
+      }
+      progress.mileDone = Math.floor(c/5);
+    }
+    drawQuestBtn();
     if(last && diff==='easy') $('ovText').textContent += ' 보통 모드를 다 깼어요! 어려운 모드에 도전해 보세요.';
     saveProgress(); sfx.win(); confetti();
   }
@@ -1077,7 +1218,17 @@ $('tab-hard').onclick = ()=>{ pickDiff='hard'; drawPicker(); };
 $('pickClose').onclick = ()=>{ $('picker').hidden = true; };
 addEventListener('resize', ()=>{ if(!busy) drawBoard(); });
 document.getElementById('nojs').remove();
-syncSound(); init();
+$('questBtn').onclick = openQuest;
+$('questClose').onclick = () => { $('quest').hidden = true; };
+$('dailyBtn').onclick = () => {
+  const d = progress.daily; if(d.claimed) return;
+  d.claimed = true;
+  const r = {coins: DAILY[d.streak-1]}; if(d.streak === 7) r.tow = 1;
+  giveReward(r); sfx.win(); toast(rewardText(r) + ' 받음!'); saveProgress(); drawQuest(); drawItems(); drawQuestBtn();
+};
+syncSound(); ensureDay(); init(); drawQuestBtn();
+// first visit of the day: open the gifts panel unless a how-to card is showing
+if(!progress.daily.claimed && $('intro').hidden) openQuest();
 </script>
 
 </body>

@@ -16,7 +16,7 @@
 :root{
   --bg:#dfe9f2; --fg:#1d2430; --muted:#5a6577; --panel:#ffffff; --line:#c9d3df;
   --asphalt:#3b4250; --asphalt2:#353b48; --stall:#e9edf2; --curb:#f2c94c; --walk:#cfd6de; --walk2:#c3cbd5;
-  --c-R:#e5484d; --c-B:#2f7fe8; --c-Y:#f0a800; --c-G:#1fa36a; --c-P:#8b5cf6; --c-K:#ec4f9c;
+  --c-R:#e5484d; --c-B:#2f7fe8; --c-Y:#f0a800; --c-G:#1fa36a; --c-P:#8b5cf6; --c-K:#ec4f9c; --c-X:#2a2e36;
   --accent:#ff7a1a; --skin:#f3c9a0;
   --display:"Jua","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
   --body:"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
@@ -101,6 +101,17 @@ button{font:inherit;cursor:pointer}
 .veh.shake svg{animation:shake .35s}
 .veh.blocker svg{animation:flash .5s}
 .veh.going{z-index:3}
+.garage{position:absolute;inset:3%;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
+  background:repeating-linear-gradient(135deg,#8a919c 0 10px,#7a818c 10px 20px);border:3px solid #5b616b;color:#fff;
+  font-family:var(--display);box-shadow:0 4px 0 rgba(0,0,0,.3)}
+.garage b{font-size:30px;font-weight:400;line-height:1;text-shadow:0 2px 0 rgba(0,0,0,.35)}
+.garage small{font-size:12px;opacity:.9}
+.veh.opened .garage{animation:garageOpen .5s forwards}
+@keyframes garageOpen{to{transform:scaleY(0);transform-origin:top;opacity:0}}
+.veh.reveal svg{animation:spin .45s}
+.inpic{display:flex;justify-content:center;align-items:center;height:90px}
+.inpic .sample{position:relative;width:170px;height:80px}
+.inpic svg{width:100%;height:100%}
 @keyframes shake{25%{transform:translate(-4px,0) rotate(-2deg)}50%{transform:translate(4px,0) rotate(2deg)}75%{transform:translate(-2px,0)}}
 @keyframes flash{30%,70%{filter:drop-shadow(0 0 8px #fff) brightness(1.4)}}
 .toast{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);font-family:var(--display);font-size:30px;color:#fff;
@@ -231,13 +242,21 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-in
     <button class="btn" id="pickClose">닫기</button>
   </div>
 </div>
+<div class="overlay" id="intro" hidden>
+  <div class="card">
+    <h2 id="inTitle"></h2>
+    <div class="inpic" id="inPic"></div>
+    <p id="inText"></p>
+    <button class="btn primary" id="inBtn">알겠어요</button>
+  </div>
+</div>
 <canvas id="fx"></canvas>
 
 <script>
 let N = 6; const START_BAYS = 4, MAX_BAYS = 7;
 let items, mode = null, used = 0, rescued = false;
-const SYM = {R:'●', B:'■', Y:'▲', G:'◆', P:'★', K:'♥'};
-const NAME = {R:'빨강', B:'파랑', Y:'노랑', G:'초록', P:'보라', K:'분홍'};
+const SYM = {R:'●', B:'■', Y:'▲', G:'◆', P:'★', K:'♥', X:'?'};
+const NAME = {R:'빨강', B:'파랑', Y:'노랑', G:'초록', P:'보라', K:'분홍', X:'물음표'};
 let diff = 'easy', levelNo = 1, current;
 let progress = {easy:{unlocked:1, stars:{}}, hard:{unlocked:1, stars:{}}};
 try{ const p = JSON.parse(localStorage.getItem('bus-progress')||'null'); if(p && p.easy && p.hard) progress = p;
@@ -302,14 +321,24 @@ function solvesCleanly(L){
   const occ = (x,y) => vs.some(v => !v.gone && (v.h ? (y===v.r && x>=v.c && x<v.c+v.len) : (x===v.c && y>=v.r && y<v.r+v.len)));
   const free = v => { let x,y; if(v.h){x=v.dir>0?v.c+v.len:v.c-1;y=v.r}else{x=v.c;y=v.dir>0?v.r+v.len:v.r-1}
     while(x>=0&&y>=0&&x<N&&y<N){ if(occ(x,y)) return false; if(v.h)x+=v.dir; else y+=v.dir; } return true; };
+  let removed = 0;
   for(const v of vs.slice().reverse()){
     const b = bays.indexOf(null);
     if(!free(v) || b < 0) return false;
-    v.gone = true; bays[b] = {v, n:0};
+    if(v.cover && removed < v.cover) return false;   // garage still closed
+    v.gone = true; bays[b] = {v, n:0}; removed++;
     for(;;){ const i = bays.findIndex(s => s && queue.length && s.v.color===queue[0] && s.n<s.v.cap); if(i<0) break;
       queue.shift(); if(++bays[i].n === bays[i].v.cap) bays[i] = null; }
   }
   return !queue.length && bays.every(s => !s);
+}
+
+// special pieces that appear as levels go up:
+//  mystery: color hidden until nothing blocks its way out
+//  cover (garage): opens after that many vehicles have left the lot
+function features(k, hard){
+  if(hard) return { mystery: .25, covers: k>=6 ? 2 : k>=3 ? 1 : 0 };
+  return { mystery: k>=4 ? .2 : 0, covers: k>=9 ? 2 : k>=7 ? 1 : 0 };
 }
 
 function seeded(seed){ return () => (seed = (seed*1664525 + 1013904223) >>> 0) / 4294967296; }
@@ -361,6 +390,13 @@ function makeLevel(k, mode = 'easy'){
     for(let i = colors.length-1; i > 0; i--){ const j = Math.floor(R()*(i+1)); [colors[i],colors[j]] = [colors[j],colors[i]]; }
     const vehicles = vs.map((v,i) => ({id:'v'+i, color:colors[i], c:v.c, r:v.r, len:v.len, h:v.h, dir:v.dir, cap:pickCap(v.len, R, k, hard)}));
     const queue = buildQueue(vehicles.slice().reverse(), P.group, R);
+    const order = vehicles.slice().reverse(), F = features(k, hard);
+    order.forEach((v,i) => { if(i >= 1 && R() < F.mystery) v.mystery = true; });
+    const spots = order.map((v,i) => [v,i]).filter(([v,i]) => i >= 2 && !v.mystery);
+    for(let c = 0; c < F.covers && spots.length; c++){
+      const [v,i] = spots.splice(Math.floor(R()*spots.length), 1)[0];
+      v.cover = Math.min(i, 2 + Math.floor(R()*4));
+    }
     const level = {n:N, vehicles, queue};
     if(solvesCleanly(level)) return level;
   }
@@ -456,13 +492,15 @@ function buzz(ms){ try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){} 
 function init(){
   current = makeLevel(levelNo, diff); N = current.n;
   $('board').style.setProperty('--n', N);
-  vehicles = current.vehicles.map(v => ({...v, cap:v.cap, gone:false}));
+  vehicles = current.vehicles.map(v => ({...v, cap:v.cap, cover:v.cover||0, revealed:!v.mystery, gone:false}));
+  revealFree();
   bays = Array(START_BAYS).fill(null);
   queue = current.queue.slice(); lastQueueLen = queue.length; stuckWarned = false;
   rescued = false; mistakes = 0; used = 0; busy = false; over = false; startAt = Date.now();
   items = {...MODE_ITEMS[diff]}; mode = null; saveProgress();
   $('overlay').hidden = true; stopFx();
   drawBoard(); drawQueue(); drawBays(); drawStat(); drawItems();
+  showIntro();
 }
 
 /* ---------- items ---------- */
@@ -531,7 +569,7 @@ function blockerOf(v){
   return null;
 }
 
-function drawBoard(){
+function drawBoard(flash){
   const b = $('board'); b.querySelectorAll('.veh').forEach(e=>e.remove());
   for(const v of vehicles){
     if(v.gone) continue;
@@ -540,8 +578,17 @@ function drawBoard(){
     el.style.left = v.c/N*100+'%'; el.style.top = v.r/N*100+'%';
     el.style.width = (v.h?v.len:1)/N*100+'%'; el.style.height = (v.h?1:v.len)/N*100+'%';
     const way = v.h ? (v.dir>0?'오른쪽':'왼쪽') : (v.dir>0?'아래':'위');
-    el.setAttribute('aria-label', `${NAME[v.color]} ${KIND[v.cap]}(${v.cap}명), ${way}으로 나감`);
-    el.innerHTML = vehicleSVG(v.color, v.len, v.h, v.dir, v.cap);
+    if(v.cover > 0){
+      el.classList.add('covered');
+      el.setAttribute('aria-label', `차고, ${v.cover}대 더 빠지면 열림`);
+      el.innerHTML = `<span class="garage"><b>${v.cover}</b><small>차고</small></span>`;
+      el.onclick = () => { if(over) return; sfx.honk(); toast(`${v.cover}대 더 빠지면 열려요`); };
+      b.appendChild(el); continue;
+    }
+    const hidden = v.mystery && !v.revealed;
+    el.setAttribute('aria-label', hidden ? `물음표 ${KIND[v.cap]}, ${way}으로 나감` : `${NAME[v.color]} ${KIND[v.cap]}(${v.cap}명), ${way}으로 나감`);
+    el.innerHTML = vehicleSVG(hidden ? 'X' : v.color, v.len, v.h, v.dir, hidden ? '?' : v.cap);
+    if(flash && flash.has(v)) el.classList.add(v.mystery ? 'reveal' : 'opened');
     el.onclick = () => tap(v, el);
     b.appendChild(el);
   }
@@ -601,7 +648,7 @@ function tap(v, el){
     sfx.depart(); buzz(20); el.classList.add('going','lift'); drawItems();
     setTimeout(()=>{
       v.gone = true; el.remove(); bays[free] = {v, n:0, leaving:false};
-      busy = false; drawBays({arrive:free}); drawStat(); drawItems(); setTimeout(kick, 300);
+      busy = false; afterLeave(); drawBays({arrive:free}); drawStat(); drawItems(); setTimeout(kick, 300);
     }, 470);
     return;
   }
@@ -621,10 +668,47 @@ function tap(v, el){
   setTimeout(()=>{
     v.gone = true; el.remove();
     bays[free] = {v, n:0, leaving:false};
-    busy = false; drawBays({arrive:free}); drawStat(); drawItems();
+    busy = false; afterLeave(); drawBays({arrive:free}); drawStat(); drawItems();
     setTimeout(kick, 300);
   }, 430);
 }
+
+/* ---------- garages and question-mark cars ---------- */
+function revealFree(){
+  const shown = [];
+  for(const v of vehicles) if(!v.gone && v.mystery && !v.revealed && !v.cover && !blockerOf(v)){ v.revealed = true; shown.push(v); }
+  return shown;
+}
+function afterLeave(){
+  const flash = new Set();
+  for(const v of vehicles) if(!v.gone && v.cover > 0){ v.cover--; if(v.cover === 0) flash.add(v); }
+  revealFree().forEach(v => flash.add(v));
+  drawBoard(flash);
+  if([...flash].some(v => !v.mystery)){ toast('차고 열림!'); sfx.board(6); }
+}
+const FEATURE_INFO = {
+  mystery: { title: '새로운 차: 물음표 차', text: '색깔이 가려진 까만 차예요. 앞길이 뚫리면 진짜 색깔이 보여요.',
+    pic: () => `<div class="sample">${vehicleSVG('X', 2, true, 1, '?')}</div>` },
+  cover: { title: '새로운 칸: 차고', text: '숫자만큼 다른 차가 주차장을 빠져나가면 문이 열리고, 안에 있던 차가 나와요.',
+    pic: () => `<div class="sample" style="width:90px"><span class="garage"><b>3</b><small>차고</small></span></div>` },
+};
+let introQueue = [];
+function showIntro(){
+  progress.seen = progress.seen || {};
+  introQueue = [];
+  if(vehicles.some(v => v.mystery) && !progress.seen.mystery) introQueue.push('mystery');
+  if(vehicles.some(v => v.cover) && !progress.seen.cover) introQueue.push('cover');
+  nextIntro();
+}
+function nextIntro(){
+  const k = introQueue.shift();
+  if(!k){ $('intro').hidden = true; return; }
+  progress.seen[k] = true; saveProgress();
+  const f = FEATURE_INFO[k];
+  $('inTitle').textContent = f.title; $('inText').textContent = f.text; $('inPic').innerHTML = f.pic();
+  $('intro').hidden = false; $('inBtn').focus();
+}
+$('inBtn').onclick = nextIntro;
 
 function kick(){ if(!ticking){ ticking = true; setTimeout(step, 70); } }
 function step(){
